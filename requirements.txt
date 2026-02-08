@@ -1,0 +1,41 @@
+# EVS Navigation System - Core Dependencies
+# Cloud ASR packages (google, tencent, ibm) are optional — install separately if needed
+
+# Web framework
+streamlit>=1.31.1
+streamlit-aggrid>=1.1.5
+
+# Data & visualization
+pandas>=2.1.4
+numpy>=1.24.0
+scipy>=1.11.0
+plotly>=6.0.0
+matplotlib>=3.7.0
+openpyxl>=3.1.0
+
+# Audio processing
+pydub>=0.25.1
+ffmpeg-python>=0.2.0
+yt-dlp>=2024.1.0
+
+# ASR - CrisperWhisper (English) + FunASR (Chinese)
+transformers>=4.36.0
+huggingface_hub>=0.20.0
+funasr>=1.0.0
+modelscope>=1.0.0
+
+# NLP (Chinese segmentation)
+jieba>=0.42.1
+hanlp>=2.1.1
+protobuf>=3.19.6
+
+# Report generation
+reportlab>=4.0.0
+kaleido>=1.0.0
+
+# Utilities
+psutil>=5.9.8
+python-dotenv>=1.0.0
+typing-extensions>=4.9.0
+py7zr>=0.21.0
+tenacity>=9.0.0

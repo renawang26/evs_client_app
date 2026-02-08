@@ -1,0 +1,173 @@
+{
+    "quality_metrics": {
+        "accuracy_weight": 0.4,
+        "fluency_weight": 0.3,
+        "completeness_weight": 0.3,
+        "scoring_thresholds": {
+            "excellent": 0.9,
+            "good": 0.8,
+            "acceptable": 0.7,
+            "needs_improvement": 0.6
+        }
+    },
+    "error_patterns": [
+        {
+            "id": "tense_error_001",
+            "type": "tense_error",
+            "pattern": "will.*了|将要.*了",
+            "description": "时态矛盾：将来时与过去时混用",
+            "severity": "medium",
+            "enabled": true
+        },
+        {
+            "id": "terminology_001",
+            "type": "terminology_error",
+            "pattern": "machine learning",
+            "description": "术语翻译不当",
+            "severity": "low",
+            "suggestion": "机器学习",
+            "enabled": true
+        },
+        {
+            "id": "number_error_001",
+            "type": "accuracy_error",
+            "pattern": "\\d+",
+            "description": "数字翻译错误",
+            "severity": "high",
+            "enabled": true
+        },
+        {
+            "id": "omission_001",
+            "type": "omission",
+            "pattern": "^\\s*$",
+            "description": "漏译检测",
+            "severity": "high",
+            "enabled": true
+        }
+    ],
+    "cultural_rules": {
+        "idiom_mappings": {
+            "rain cats and dogs": "倾盆大雨",
+            "piece of cake": "小菜一碟",
+            "break a leg": "祝好运",
+            "spill the beans": "泄露秘密",
+            "hit the nail on the head": "一针见血",
+            "costs an arm and a leg": "价格昂贵"
+        },
+        "formality_rules": {
+            "formal_titles": [
+                "先生",
+                "女士",
+                "教授",
+                "博士",
+                "主席",
+                "部长"
+            ],
+            "require_honorific": true,
+            "politeness_markers": {
+                "chinese": [
+                    "您",
+                    "请",
+                    "麻烦",
+                    "劳驾"
+                ],
+                "english": [
+                    "please",
+                    "thank you",
+                    "excuse me",
+                    "pardon"
+                ]
+            }
+        },
+        "cultural_adaptations": {
+            "units": {
+                "temperature": {
+                    "fahrenheit_pattern": "\\d+°F|\\d+ degrees? Fahrenheit",
+                    "celsius_suggestion": "摄氏度"
+                },
+                "distance": {
+                    "miles_pattern": "\\d+ miles?",
+                    "kilometer_suggestion": "公里"
+                }
+            }
+        }
+    },
+    "timing_analysis": {
+        "delay_thresholds": {
+            "excellent": 1.0,
+            "good": 2.0,
+            "acceptable": 3.0,
+            "needs_improvement": 5.0
+        },
+        "speaking_rate": {
+            "chinese": 3.5,
+            "english": 3.0
+        },
+        "processing_time_base": 0.5
+    },
+    "terminology_dictionary": {
+        "technical_terms": {
+            "artificial intelligence": "人工智能",
+            "machine learning": "机器学习",
+            "deep learning": "深度学习",
+            "neural network": "神经网络",
+            "big data": "大数据",
+            "cloud computing": "云计算",
+            "blockchain": "区块链",
+            "internet of things": "物联网"
+        },
+        "business_terms": {
+            "quarterly report": "季度报告",
+            "market share": "市场份额",
+            "revenue": "营收",
+            "profit margin": "利润率",
+            "stakeholder": "利益相关者",
+            "supply chain": "供应链"
+        },
+        "medical_terms": {
+            "diagnosis": "诊断",
+            "treatment": "治疗",
+            "symptom": "症状",
+            "prescription": "处方",
+            "cardiovascular": "心血管的",
+            "hypertension": "高血压"
+        }
+    },
+    "fluency_markers": {
+        "disfluency_indicators": [
+            "呃",
+            "啊",
+            "那个",
+            "这个",
+            "就是说",
+            "怎么说呢",
+            "um",
+            "uh",
+            "er",
+            "hmm",
+            "like",
+            "you know",
+            "I mean"
+        ],
+        "hesitation_patterns": [
+            "\\.\\.\\.",
+            "--",
+            "，，",
+            "。。"
+        ],
+        "repetition_pattern": "(\\b\\w+\\b)\\s+\\1"
+    },
+    "analysis_settings": {
+        "min_segment_length": 3,
+        "max_processing_time": 300,
+        "confidence_threshold": 0.7,
+        "enable_llm_enhancement": true,
+        "llm_models": {
+            "default": "gemma3:27b",
+            "alternatives": [
+                "gpt-3.5-turbo",
+                "claude-3-sonnet"
+            ]
+        }
+    }
+}

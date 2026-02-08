@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Word Aligner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Source Sans Pro", "Segoe UI", Roboto, sans-serif;
+    background: transparent;
+    padding: 8px 4px;
+    color: #333;
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+  }
+
+  .word-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .word-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border: 2px solid #d0d0d0;
+    border-radius: 18px;
+    background: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    position: relative;
+    min-height: 34px;
+  }
+
+  .word-btn:hover {
+    border-color: #888;
+    background: #f0f0f0;
+  }
+
+  .word-btn.selected {
+    background: #e53935;
+    color: #fff;
+    border-color: #c62828;
+  }
+
+  .word-btn.paired {
+    border-color: transparent;
+    color: #fff;
+    font-weight: 500;
+  }
+
+  .word-btn .pair-badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #333;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .divider {
+    height: 1px;
+    background: #e0e0e0;
+    margin: 4px 0 10px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    padding: 7px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .save-btn {
+    background: #1976d2;
+    color: #fff;
+  }
+  .save-btn:hover { background: #1565c0; }
+  .save-btn:disabled {
+    background: #b0bec5;
+    cursor: not-allowed;
+  }
+
+  .clear-btn {
+    background: #eee;
+    color: #555;
+  }
+  .clear-btn:hover { background: #ddd; }
+
+  .undo-btn {
+    background: #fff3e0;
+    color: #e65100;
+  }
+  .undo-btn:hover { background: #ffe0b2; }
+
+  .pair-list {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.8;
+  }
+
+  .pair-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f5f5f5;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin: 2px 4px 2px 0;
+    border: 1px solid #e0e0e0;
+  }
+
+  .pair-item .arrow { color: #999; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="section-label">English Words</div>
+  <div class="word-row" id="en-row"></div>
+
+  <div class="divider"></div>
+
+  <div class="section-label">中文词语</div>
+  <div class="word-row" id="zh-row"></div>
+
+  <div class="actions">
+    <button class="action-btn save-btn" id="save-btn" disabled>Save Pairs</button>
+    <button class="action-btn undo-btn" id="undo-btn" style="display:none">Undo Last</button>
+    <button class="action-btn clear-btn" id="clear-btn">Clear All</button>
+  </div>
+
+  <div class="pair-list" id="pair-list"></div>
+</div>
+
+<script>
+// ── Streamlit iframe communication (no npm library needed) ───────
+function sendMessageToStreamlitClient(type, data) {
+  var outData = Object.assign({
+    isStreamlitMessage: true,
+    type: type
+  }, data);
+  window.parent.postMessage(outData, "*");
+}
+
+function stInit() {
+  sendMessageToStreamlitClient("streamlit:componentReady", {apiVersion: 1});
+}
+
+function sendToStreamlit(value) {
+  sendMessageToStreamlitClient("streamlit:setComponentValue", {
+    value: value,
+    dataType: "json"
+  });
+}
+
+function setFrameHeight(height) {
+  sendMessageToStreamlitClient("streamlit:setFrameHeight", {
+    height: height || document.body.scrollHeight + 20
+  });
+}
+
+// ── Colour palette for paired words ──────────────────────────────
+const PAIR_COLORS = [
+  "#4caf50", "#2196f3", "#ff9800", "#9c27b0",
+  "#00bcd4", "#e91e63", "#795548", "#607d8b",
+  "#8bc34a", "#3f51b5", "#ff5722", "#009688",
+];
+
+// ── State ────────────────────────────────────────────────────────
+let enWords = [];
+let zhWords = [];
+let pairs = [];           // [{en: "word", zh: "词", en_idx: 0, zh_idx: 0}, ...]
+let selectedEn = null;    // index in enWords
+let selectedZh = null;    // index in zhWords
+let enPairMap = {};       // en_idx -> pair index
+let zhPairMap = {};       // zh_idx -> pair index
+
+// ── Rendering ────────────────────────────────────────────────────
+function render() {
+  const enRow = document.getElementById("en-row");
+  const zhRow = document.getElementById("zh-row");
+
+  enRow.innerHTML = "";
+  zhRow.innerHTML = "";
+
+  enWords.forEach(function (w, i) {
+    const btn = document.createElement("button");
+    btn.className = "word-btn";
+    btn.textContent = w;
+
+    if (selectedEn === i) {
+      btn.classList.add("selected");
+    } else if (i in enPairMap) {
+      const color = PAIR_COLORS[enPairMap[i] % PAIR_COLORS.length];
+      btn.classList.add("paired");
+      btn.style.background = color;
+      btn.style.borderColor = color;
+      // badge
+      const badge = document.createElement("span");
+      badge.className = "pair-badge";
+      badge.textContent = enPairMap[i] + 1;
+      btn.appendChild(badge);
+    }
+
+    btn.addEventListener("click", function () { onClickEn(i); });
+    enRow.appendChild(btn);
+  });
+
+  zhWords.forEach(function (w, i) {
+    const btn = document.createElement("button");
+    btn.className = "word-btn";
+    btn.textContent = w;
+
+    if (selectedZh === i) {
+      btn.classList.add("selected");
+    } else if (i in zhPairMap) {
+      const color = PAIR_COLORS[zhPairMap[i] % PAIR_COLORS.length];
+      btn.classList.add("paired");
+      btn.style.background = color;
+      btn.style.borderColor = color;
+      const badge = document.createElement("span");
+      badge.className = "pair-badge";
+      badge.textContent = zhPairMap[i] + 1;
+      btn.appendChild(badge);
+    }
+
+    btn.addEventListener("click", function () { onClickZh(i); });
+    zhRow.appendChild(btn);
+  });
+
+  // pair list
+  const pairList = document.getElementById("pair-list");
+  if (pairs.length === 0) {
+    pairList.innerHTML = "";
+  } else {
+    pairList.innerHTML = "<strong>Pairs:</strong> " + pairs.map(function (p, idx) {
+      const color = PAIR_COLORS[idx % PAIR_COLORS.length];
+      return '<span class="pair-item" style="border-color:' + color + '">'
+        + '<span style="color:' + color + ';font-weight:600">' + (idx + 1) + '</span> '
+        + escapeHtml(p.en) + ' <span class="arrow">↔</span> ' + escapeHtml(p.zh)
+        + '</span>';
+    }).join(" ");
+  }
+
+  // button states
+  document.getElementById("save-btn").disabled = pairs.length === 0;
+  document.getElementById("undo-btn").style.display = pairs.length > 0 ? "" : "none";
+
+  setFrameHeight();
+}
+
+function escapeHtml(t) {
+  var d = document.createElement("div");
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+// ── Interaction logic ────────────────────────────────────────────
+function onClickEn(idx) {
+  // If already paired, clicking again unpairs it
+  if (idx in enPairMap) {
+    removePairByIndex(enPairMap[idx]);
+    selectedEn = null;
+    render();
+    return;
+  }
+  selectedEn = (selectedEn === idx) ? null : idx;
+  tryPair();
+  render();
+}
+
+function onClickZh(idx) {
+  if (idx in zhPairMap) {
+    removePairByIndex(zhPairMap[idx]);
+    selectedZh = null;
+    render();
+    return;
+  }
+  selectedZh = (selectedZh === idx) ? null : idx;
+  tryPair();
+  render();
+}
+
+function tryPair() {
+  if (selectedEn !== null && selectedZh !== null) {
+    pairs.push({
+      en: enWords[selectedEn],
+      zh: zhWords[selectedZh],
+      en_idx: selectedEn,
+      zh_idx: selectedZh
+    });
+    rebuildMaps();
+    selectedEn = null;
+    selectedZh = null;
+  }
+}
+
+function removePairByIndex(pairIdx) {
+  pairs.splice(pairIdx, 1);
+  rebuildMaps();
+}
+
+function rebuildMaps() {
+  enPairMap = {};
+  zhPairMap = {};
+  pairs.forEach(function (p, i) {
+    enPairMap[p.en_idx] = i;
+    zhPairMap[p.zh_idx] = i;
+  });
+}
+
+// ── Button handlers ──────────────────────────────────────────────
+document.getElementById("save-btn").addEventListener("click", function () {
+  var output = pairs.map(function (p) {
+    return { en: p.en, zh: p.zh, en_idx: p.en_idx, zh_idx: p.zh_idx };
+  });
+  sendToStreamlit(output);
+});
+
+document.getElementById("undo-btn").addEventListener("click", function () {
+  if (pairs.length > 0) {
+    pairs.pop();
+    rebuildMaps();
+    selectedEn = null;
+    selectedZh = null;
+    render();
+  }
+});
+
+document.getElementById("clear-btn").addEventListener("click", function () {
+  pairs = [];
+  enPairMap = {};
+  zhPairMap = {};
+  selectedEn = null;
+  selectedZh = null;
+  render();
+});
+
+// ── Streamlit bootstrap (postMessage-based) ──────────────────────
+function onDataFromPython(event) {
+  if (event.data.type !== "streamlit:render") return;
+  var args = event.data.args;
+  enWords = args.en_words || [];
+  zhWords = args.zh_words || [];
+  // Restore previous pairs if provided
+  if (args.default_pairs && args.default_pairs.length > 0) {
+    pairs = args.default_pairs;
+    rebuildMaps();
+  }
+  render();
+  setFrameHeight();
+}
+
+// Listen for render events from Streamlit
+window.addEventListener("message", onDataFromPython);
+
+// Signal that the component is ready
+stInit();
+
+// Set initial frame height after load
+window.addEventListener("load", function() {
+  window.setTimeout(function() {
+    setFrameHeight();
+  }, 0);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EVS Annotator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Source Sans Pro", "Segoe UI", Roboto, sans-serif;
+    background: transparent;
+    padding: 0;
+    color: #333;
+    overflow-x: hidden;
+  }
+
+  /* ── Time group ─────────────────────────────────── */
+  .time-group {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .time-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f5f5f5;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #444;
+    border-bottom: 1px solid #e0e0e0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .time-group-header:hover { background: #ebebeb; }
+  .time-group-header .toggle { font-size: 11px; color: #999; margin-left: auto; }
+  .time-group-header .tg-title { flex-shrink: 0; }
+  .time-group-header audio {
+    height: 30px;
+    max-width: 320px;
+    flex: 1;
+  }
+  .time-group-body { padding: 6px 8px 8px; }
+  .time-group.collapsed .time-group-body { display: none; }
+  .time-group.collapsed .time-group-header { border-bottom: none; }
+
+  /* ── Time row (one seconds_per_row span) ────────── */
+  .time-row {
+    display: flex;
+    gap: 1px;
+    margin-bottom: 1px;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  /* ── Word column (one timestamp slot) ───────────── */
+  .word-col {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 1px;
+  }
+  .ts-label {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 2px;
+  }
+
+  /* ── Word button ────────────────────────────────── */
+  .word-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 2px;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    user-select: none;
+    text-align: center;
+    position: relative;
+    min-height: 22px;
+    word-break: break-all;
+    line-height: 1.1;
+  }
+  .word-btn:hover {
+    border-color: #888;
+    background: #f0f0f0;
+  }
+  /* Selected (user just clicked, awaiting partner or toggling) */
+  .word-btn.selected {
+    background: #e53935;
+    color: #fff;
+    border-color: #c62828;
+    border-width: 1px;
+  }
+  /* Existing DB pair */
+  .word-btn.db-paired {
+    color: #000;
+    font-weight: 500;
+  }
+  /* User-selected pair (preview) */
+  .word-btn.user-paired {
+    color: #000;
+    font-weight: 500;
+  }
+  .word-btn.empty-slot {
+    border: 1px dashed #e0e0e0;
+    background: #fafafa;
+    color: #ccc;
+    cursor: default;
+    min-height: 28px;
+    font-size: 11px;
+  }
+  .word-btn.empty-slot:hover {
+    background: #fafafa;
+    border-color: #e0e0e0;
+  }
+
+  /* Pair badge on button */
+  .pair-badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    line-height: 1;
+    z-index: 2;
+  }
+
+  /* ── Language separator ─────────────────────────── */
+  .lang-sep {
+    height: 1px;
+    background: #e8e8e8;
+    margin: 1px 0;
+  }
+
+  /* ── Status bar ─────────────────────────────────── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: #e3f2fd;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #1565c0;
+    flex-wrap: wrap;
+  }
+  .status-bar.has-selection {
+    background: #fff3e0;
+    color: #e65100;
+  }
+  .status-bar .sel-word {
+    font-weight: 600;
+    background: #e53935;
+    color: #fff;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  /* ── Action bar (Save / Clear) ───────────────────── */
+  .action-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .action-bar button {
+    padding: 6px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-save {
+    background: #1976d2;
+    color: #fff;
+  }
+  .btn-save:hover { background: #1565c0; }
+  .btn-save:disabled {
+    background: #90caf9;
+    cursor: default;
+  }
+  .btn-clear {
+    background: #eee;
+    color: #555;
+  }
+  .btn-clear:hover { background: #ddd; }
+
+  .no-data {
+    color: #999;
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="action-bar" class="action-bar" style="display:none">
+    <button class="btn-save" id="btn-save" disabled>Save Pairs</button>
+    <button class="btn-clear" id="btn-clear">Clear All</button>
+    <span id="action-info" style="font-size:12px;color:#666"></span>
+  </div>
+  <div id="status-bar" class="status-bar" style="display:none"></div>
+  <div id="groups-container"></div>
+</div>
+
+<script>
+// ── Streamlit iframe communication ───────────────────────────────
+function sendMessageToStreamlitClient(type, data) {
+  var outData = Object.assign({ isStreamlitMessage: true, type: type }, data);
+  window.parent.postMessage(outData, "*");
+}
+function stInit() {
+  sendMessageToStreamlitClient("streamlit:componentReady", {apiVersion: 1});
+}
+function sendToStreamlit(value) {
+  sendMessageToStreamlitClient("streamlit:setComponentValue", {
+    value: value,
+    dataType: "json"
+  });
+}
+function setFrameHeight() {
+  sendMessageToStreamlitClient("streamlit:setFrameHeight", {
+    height: document.body.scrollHeight + 10
+  });
+}
+
+// ── Pair colours (same as app.py PAIR_COLORS) ────────────────────
+var PAIR_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+  '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+  '#F8B500', '#82E0AA', '#F1948A', '#AED6F1', '#D7BDE2'
+];
+function pairColor(idx) { return PAIR_COLORS[idx % PAIR_COLORS.length]; }
+
+// ── State ────────────────────────────────────────────────────────
+var groups = [];
+var secondsPerRow = 5;
+var fontSize = 14;
+
+var enSelections = {};     // key -> {time, word, segment_id, word_seq_no}
+var zhSelections = {};
+var collapsedGroups = {};
+var hasLocalChanges = false;  // true when user has unsaved client-side selections
+
+// existing DB pairs lookup
+var existingPairs = {};    // "en_segId_seqNo" -> {pair_seq, pair_type}
+
+// ── Key helpers ──────────────────────────────────────────────────
+function enKey(w) { return 'en_' + w.segment_id + '_' + w.word_seq_no; }
+function zhKey(w) { return 'zh_' + w.segment_id + '_' + w.word_seq_no; }
+
+// ── Compute preview pairs (sorted by time, zipped) ───────────────
+function computePreviewPairs() {
+  var enArr = sortedSelections(enSelections);
+  var zhArr = sortedSelections(zhSelections);
+  var count = Math.min(enArr.length, zhArr.length);
+  var enMap = {};  // enKey -> pair index (0-based)
+  var zhMap = {};
+  for (var i = 0; i < count; i++) {
+    enMap[enArr[i].key] = i;
+    zhMap[zhArr[i].key] = i;
+  }
+  return { enMap: enMap, zhMap: zhMap, count: count, enArr: enArr, zhArr: zhArr };
+}
+
+// ── Rendering ────────────────────────────────────────────────────
+var previewPairs = { enMap: {}, zhMap: {}, count: 0, enArr: [], zhArr: [] };
+
+function render() {
+  previewPairs = computePreviewPairs();
+
+  var container = document.getElementById('groups-container');
+  container.innerHTML = '';
+
+  if (groups.length === 0) {
+    container.innerHTML = '<div class="no-data">No word data</div>';
+    renderStatus();
+    setFrameHeight();
+    return;
+  }
+
+  groups.forEach(function (g) {
+    var div = document.createElement('div');
+    div.className = 'time-group' + (collapsedGroups[g.time_group_key] ? ' collapsed' : '');
+
+    // header with audio
+    var header = document.createElement('div');
+    header.className = 'time-group-header';
+
+    var title = document.createElement('span');
+    title.className = 'tg-title';
+    title.textContent = 'Time: ' + g.time_group_key;
+    header.appendChild(title);
+
+    if (g.audio_src) {
+      var audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'none';
+      audio.src = g.audio_src;
+      // Stop click on audio from toggling collapse
+      audio.addEventListener('click', function(e) { e.stopPropagation(); });
+      header.appendChild(audio);
+    }
+
+    var toggle = document.createElement('span');
+    toggle.className = 'toggle';
+    toggle.innerHTML = collapsedGroups[g.time_group_key] ? '&#9654;' : '&#9660;';
+    header.appendChild(toggle);
+
+    header.addEventListener('click', function (e) {
+      if (e.target.tagName === 'AUDIO') return;
+      collapsedGroups[g.time_group_key] = !collapsedGroups[g.time_group_key];
+      render();
+    });
+    div.appendChild(header);
+
+    // body
+    var body = document.createElement('div');
+    body.className = 'time-group-body';
+    renderTimeGroupBody(body, g.words);
+    div.appendChild(body);
+
+    container.appendChild(div);
+  });
+
+  renderStatus();
+  setFrameHeight();
+}
+
+function renderTimeGroupBody(container, words) {
+  if (!words || words.length === 0) {
+    container.innerHTML = '<div class="no-data">(No words)</div>';
+    return;
+  }
+
+  var minTime = Infinity, maxTime = -Infinity;
+  words.forEach(function (w) {
+    if (w.ts_float < minTime) minTime = w.ts_float;
+    if (w.ts_float > maxTime) maxTime = w.ts_float;
+  });
+
+  var currentTime = minTime;
+  while (currentTime <= maxTime) {
+    var rowEnd = currentTime + secondsPerRow;
+    var rowItems = words.filter(function (w) {
+      return w.ts_float >= currentTime && w.ts_float < rowEnd;
+    });
+
+    if (rowItems.length > 0) {
+      // Timestamp labels
+      var tsRow = document.createElement('div');
+      tsRow.className = 'time-row';
+      rowItems.forEach(function (item) {
+        var col = document.createElement('div');
+        col.className = 'word-col';
+        var label = document.createElement('div');
+        label.className = 'ts-label';
+        label.textContent = item.ts;
+        col.appendChild(label);
+        tsRow.appendChild(col);
+      });
+      container.appendChild(tsRow);
+
+      // English buttons
+      var enRow = document.createElement('div');
+      enRow.className = 'time-row';
+      rowItems.forEach(function (item) {
+        var col = document.createElement('div');
+        col.className = 'word-col';
+        col.appendChild(makeWordBtn(item, 'en'));
+        enRow.appendChild(col);
+      });
+      container.appendChild(enRow);
+
+      // Separator
+      var sep = document.createElement('div');
+      sep.className = 'lang-sep';
+      container.appendChild(sep);
+
+      // Chinese buttons
+      var zhRow = document.createElement('div');
+      zhRow.className = 'time-row';
+      rowItems.forEach(function (item) {
+        var col = document.createElement('div');
+        col.className = 'word-col';
+        col.appendChild(makeWordBtn(item, 'zh'));
+        zhRow.appendChild(col);
+      });
+      container.appendChild(zhRow);
+
+      var spacer = document.createElement('div');
+      spacer.style.height = '3px';
+      container.appendChild(spacer);
+    }
+    currentTime = rowEnd;
+  }
+}
+
+function makeWordBtn(item, lang) {
+  var info = item[lang];
+  var btn = document.createElement('div');
+
+  if (!info) {
+    btn.className = 'word-btn empty-slot';
+    btn.textContent = '-';
+    btn.style.fontSize = fontSize + 'px';
+    return btn;
+  }
+
+  var key = lang === 'en' ? enKey(info) : zhKey(info);
+  var isSelected = key in (lang === 'en' ? enSelections : zhSelections);
+
+  // Check existing DB pair
+  var ep = existingPairs[key];
+
+  // Check user preview pair
+  var previewMap = lang === 'en' ? previewPairs.enMap : previewPairs.zhMap;
+  var previewIdx = previewMap[key];
+  var hasPreview = (previewIdx !== undefined);
+
+  btn.className = 'word-btn';
+  btn.textContent = info.word;
+  btn.style.fontSize = fontSize + 'px';
+
+  if (isSelected && hasPreview) {
+    // User-paired: show pair color + badge
+    var color = pairColor(previewIdx);
+    btn.classList.add('user-paired');
+    btn.style.background = color;
+    btn.style.borderColor = color;
+    var badge = document.createElement('span');
+    badge.className = 'pair-badge';
+    badge.style.background = '#333';
+    badge.textContent = (previewIdx + 1);
+    btn.appendChild(badge);
+  } else if (isSelected) {
+    // Selected but no pair partner yet
+    btn.classList.add('selected');
+  }
+
+  btn.addEventListener('click', function () {
+    onWordClick(lang, key, info);
+  });
+
+  return btn;
+}
+
+// ── Selection logic (all client-side, NO rerun) ──────────────────
+function onWordClick(lang, key, info) {
+  var selections = lang === 'en' ? enSelections : zhSelections;
+
+  if (key in selections) {
+    delete selections[key];
+  } else {
+    selections[key] = {
+      time: info.start_time,
+      word: info.word,
+      segment_id: info.segment_id,
+      word_seq_no: info.word_seq_no
+    };
+  }
+
+  hasLocalChanges = true;
+  render();
+}
+
+// ── Save: emit selections to Streamlit (triggers ONE rerun) ──────
+function onSavePairs() {
+  sendToStreamlit({
+    action: 'save_pairs',
+    en_selections: enSelections,
+    zh_selections: zhSelections
+  });
+  hasLocalChanges = false;
+}
+
+// ── Clear: purely client-side, no rerun ──────────────────────────
+function onClearSelections() {
+  enSelections = {};
+  zhSelections = {};
+  hasLocalChanges = true;
+  render();
+}
+
+// ── Status bar + action bar ───────────────────────────────────────
+function renderStatus() {
+  var bar = document.getElementById('status-bar');
+  var actionBar = document.getElementById('action-bar');
+  var saveBtn = document.getElementById('btn-save');
+  var infoSpan = document.getElementById('action-info');
+  var enCount = Object.keys(enSelections).length;
+  var zhCount = Object.keys(zhSelections).length;
+
+  var hasSel = enCount > 0 || zhCount > 0;
+
+  // Action bar: visible when there are selections
+  actionBar.style.display = hasSel ? 'flex' : 'none';
+  saveBtn.disabled = (previewPairs.count === 0);
+
+  // Info text
+  var infoText = enCount + ' EN, ' + zhCount + ' ZH selected';
+  if (previewPairs.count > 0) {
+    infoText += ' \u2014 ' + previewPairs.count + ' pair(s) ready (save replaces all existing)';
+  }
+  infoSpan.textContent = hasSel ? infoText : '';
+
+  // Status bar with pair previews
+  if (!hasSel) {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  bar.className = 'status-bar' + (previewPairs.count > 0 ? '' : ' has-selection');
+
+  var html = '';
+  if (previewPairs.count > 0) {
+    for (var i = 0; i < previewPairs.count; i++) {
+      var en = previewPairs.enArr[i];
+      var zh = previewPairs.zhArr[i];
+      var evs = (parseFloat(zh.val.time) - parseFloat(en.val.time)).toFixed(3);
+      var c = pairColor(i);
+      html += ' <span style="background:' + c + ';color:#000;padding:1px 6px;border-radius:8px;font-size:11px">'
+        + (i+1) + ': ' + escHtml(en.val.word) + '\u2194' + escHtml(zh.val.word)
+        + ' (' + evs + 's)</span>';
+    }
+  }
+
+  if (enCount !== zhCount) {
+    html += ' <span style="color:#e65100;font-size:11px">(unequal \u2014 extra words ignored)</span>';
+  }
+
+  bar.innerHTML = html;
+}
+
+// ── Util ─────────────────────────────────────────────────────────
+function sortedSelections(sel) {
+  var arr = [];
+  for (var k in sel) {
+    if (sel.hasOwnProperty(k)) {
+      arr.push({ key: k, val: sel[k] });
+    }
+  }
+  arr.sort(function (a, b) { return parseFloat(a.val.time) - parseFloat(b.val.time); });
+  return arr;
+}
+
+function escHtml(t) {
+  var d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+// ── Streamlit bootstrap (postMessage) ────────────────────────────
+function onDataFromPython(event) {
+  if (event.data.type !== "streamlit:render") return;
+  var args = event.data.args;
+
+  groups = args.groups || [];
+  secondsPerRow = args.seconds_per_row || 5;
+  fontSize = args.font_size || 14;
+
+  // Only import selections from Python if user has no unsaved client-side changes.
+  // This prevents a rerun (caused by another widget) from overwriting the user's
+  // in-progress word selections.
+  if (!hasLocalChanges) {
+    enSelections = args.en_selections || {};
+    zhSelections = args.zh_selections || {};
+  }
+
+  // Build existing pairs lookup and pre-load them as selections
+  existingPairs = {};
+  groups.forEach(function (g) {
+    (g.words || []).forEach(function (w) {
+      if (w.en && w.en.pair_seq) {
+        existingPairs[enKey(w.en)] = { pair_seq: w.en.pair_seq, pair_type: w.en.pair_type };
+        // Auto-select existing paired words so user can re-organize
+        if (!hasLocalChanges && !(enKey(w.en) in enSelections)) {
+          enSelections[enKey(w.en)] = {
+            time: w.en.start_time,
+            word: w.en.word,
+            segment_id: w.en.segment_id,
+            word_seq_no: w.en.word_seq_no
+          };
+        }
+      }
+      if (w.zh && w.zh.pair_seq) {
+        existingPairs[zhKey(w.zh)] = { pair_seq: w.zh.pair_seq, pair_type: w.zh.pair_type };
+        if (!hasLocalChanges && !(zhKey(w.zh) in zhSelections)) {
+          zhSelections[zhKey(w.zh)] = {
+            time: w.zh.start_time,
+            word: w.zh.word,
+            segment_id: w.zh.segment_id,
+            word_seq_no: w.zh.word_seq_no
+          };
+        }
+      }
+    });
+  });
+
+  render();
+}
+
+window.addEventListener("message", onDataFromPython);
+stInit();
+
+// Wire up action buttons
+document.getElementById('btn-save').addEventListener('click', onSavePairs);
+document.getElementById('btn-clear').addEventListener('click', onClearSelections);
+
+window.addEventListener("load", function() {
+  window.setTimeout(function() { setFrameHeight(); }, 0);
+});
+</script>
+</body>
+</html>

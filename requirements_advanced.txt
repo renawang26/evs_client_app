@@ -1,0 +1,25 @@
+# Advanced Interpretation Analysis Dependencies
+# 高级同声传译分析依赖包
+
+# Core NLP libraries
+sentence-transformers>=2.2.2
+spacy>=3.4.0
+transformers>=4.21.0
+torch>=1.12.0
+
+# Chinese language models for spaCy
+# Install with: python -m spacy download zh_core_web_sm
+# English models: python -m spacy download en_core_web_sm
+
+# Additional ML libraries
+scikit-learn>=1.1.0
+numpy>=1.21.0
+pandas>=1.5.0
+
+# Optional: GPU support for faster processing
+# torch-audio>=0.12.0  # for audio processing
+# torchaudio>=0.12.0
+
+# Optional: Advanced sentiment analysis
+# vaderSentiment>=3.3.2
+# textblob>=0.17.1
