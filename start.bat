@@ -28,6 +28,9 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
+echo Activating conda environment '%CONDA_ENV%'...
+call conda activate %CONDA_ENV%
+
 REM Find an available port starting from 8501
 set "PORT=8501"
 :find_port
@@ -51,5 +54,5 @@ echo.
 echo Press Ctrl+C to stop the server.
 echo.
 
-REM Start the application using conda run to ensure correct environment
-conda run -n %CONDA_ENV% --no-capture-output python -m streamlit run app.py --server.address localhost --server.port !PORT!
+REM Start the application
+python -m streamlit run app.py --server.address localhost --server.port !PORT!
