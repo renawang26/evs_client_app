@@ -121,6 +121,14 @@ class OpenAIClient:
             logger.error(error_message, exc_info=True)
             return f"Error generating response: {error_message}"
 
+        except httpx.ConnectError:
+            error_msg = (
+                f"Cannot connect to LLM server at {self.api_base}. "
+                "Please make sure the LLM server is running."
+            )
+            logger.error(error_msg)
+            raise ConnectionError(error_msg)
+
         except Exception as e:
             error_message = f"Error calling OpenAI API: {e}"
             logger.error(error_message, exc_info=True)

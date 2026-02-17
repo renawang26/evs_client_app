@@ -62,14 +62,14 @@ REM ============================================================
 echo.
 echo [3/4] Setting up Conda environment [cw_evs_app]...
 
-conda env list | findstr /C:"cw_evs_app" >nul 2>&1
+call conda env list | findstr /C:"cw_evs_app" >nul 2>&1
 if !errorLevel! equ 0 (
     if !REINSTALL! equ 1 (
         echo       Removing existing environment...
-        call conda deactivate 2>nul
-        conda env remove -n cw_evs_app -y
+        call conda deactivate
+        call conda env remove -n cw_evs_app -y
         echo       Creating new environment [Python 3.11]...
-        conda create -n cw_evs_app python=3.11 -y
+        call conda create -n cw_evs_app python=3.11 -y
     ) else (
         echo       Environment 'cw_evs_app' already exists. Skipping.
         echo       Use 'setup.bat --reinstall' to recreate.
@@ -77,7 +77,7 @@ if !errorLevel! equ 0 (
     )
 ) else (
     echo       Creating new environment [Python 3.11]...
-    conda create -n cw_evs_app python=3.11 -y
+    call conda create -n cw_evs_app python=3.11 -y
 )
 
 :activate
@@ -85,11 +85,37 @@ REM Activate environment
 echo       Activating environment...
 call conda activate cw_evs_app
 
+REM Verify activation succeeded
+if /i "!CONDA_DEFAULT_ENV!" neq "cw_evs_app" (
+    echo [ERROR] Failed to activate conda environment 'cw_evs_app'.
+    echo        Try running: conda init cmd.exe
+    echo        Then reopen this terminal and run setup.bat again.
+    pause
+    exit /b 1
+)
+echo       Environment activated: !CONDA_DEFAULT_ENV!
+
 REM Install FFmpeg via conda
 echo       Installing FFmpeg via conda...
-conda install -c conda-forge ffmpeg -y
+call conda install -c conda-forge ffmpeg -y
 
-REM Install pip dependencies
+REM Install PyTorch via conda (before pip to avoid CPU-only wheels from pip mirrors)
+echo.
+echo       Detecting GPU...
+nvidia-smi >nul 2>&1
+if !errorLevel! equ 0 (
+    echo       NVIDIA GPU detected. Installing PyTorch with CUDA via conda...
+    call conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y
+    if !errorLevel! neq 0 (
+        echo       CUDA 12.4 failed, trying CUDA 12.1...
+        call conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
+    )
+) else (
+    echo       No NVIDIA GPU detected. Installing CPU-only PyTorch via conda...
+    call conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+)
+
+REM Install pip dependencies (torch/torchaudio already installed by conda, not in requirements.txt)
 echo.
 echo       Installing pip dependencies...
 pip install -r requirements.txt
@@ -97,29 +123,6 @@ pip install -r requirements.txt
 if !errorLevel! neq 0 (
     echo [ERROR] Failed to install some requirements.
     echo        Try: setup.bat --reinstall
-)
-
-REM Install PyTorch with GPU/CPU support
-echo.
-echo       Detecting GPU...
-nvidia-smi >nul 2>&1
-if !errorLevel! equ 0 (
-    echo       NVIDIA GPU detected. Installing PyTorch with CUDA...
-    echo       Uninstalling CPU-only PyTorch...
-    pip uninstall torch torchvision torchaudio -y 2>nul
-    echo       Installing PyTorch with CUDA 12.4...
-    REM Temporarily disable pip config to prevent mirror from serving CPU wheels
-    set "PIP_CONFIG_FILE=NUL"
-    set "PIP_EXTRA_INDEX_URL=https://pypi.org/simple/"
-    pip install torch torchvision torchaudio --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 --extra-index-url https://pypi.org/simple/
-    if !errorLevel! neq 0 (
-        echo       CUDA 12.4 failed, trying CUDA 12.1...
-        pip install torch torchvision torchaudio --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 --extra-index-url https://pypi.org/simple/
-    )
-    set "PIP_CONFIG_FILE="
-    set "PIP_EXTRA_INDEX_URL="
-) else (
-    echo       No NVIDIA GPU detected. Using CPU-only PyTorch.
 )
 
 REM Verify key packages are installed

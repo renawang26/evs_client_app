@@ -31,6 +31,14 @@ if %errorLevel% neq 0 (
 echo Activating conda environment '%CONDA_ENV%'...
 call conda activate %CONDA_ENV%
 
+if /i "!CONDA_DEFAULT_ENV!" neq "cw_evs_app" (
+    echo [ERROR] Failed to activate conda environment 'cw_evs_app'.
+    echo        Try running: conda init cmd.exe
+    echo        Then reopen this terminal.
+    pause
+    exit /b 1
+)
+
 REM Find an available port starting from 8501
 set "PORT=8501"
 :find_port

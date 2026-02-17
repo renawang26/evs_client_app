@@ -50,8 +50,8 @@
   /* ── Time row (one seconds_per_row span) ────────── */
   .time-row {
     display: flex;
-    gap: 1px;
-    margin-bottom: 1px;
+    gap: 4px;
+    margin-bottom: 4px;
     align-items: stretch;
     flex-wrap: wrap;
   }
@@ -63,7 +63,7 @@
     align-items: stretch;
     min-width: 0;
     flex: 0 0 auto;
-    gap: 1px;
+    gap: 2px;
   }
   .ts-label {
     font-size: 10px;
@@ -82,7 +82,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1px 2px;
+    padding: 2px 4px;
     border: 1px solid #d0d0d0;
     border-radius: 4px;
     background: #fff;
@@ -91,9 +91,9 @@
     user-select: none;
     text-align: center;
     position: relative;
-    min-height: 22px;
+    min-height: 24px;
     word-break: break-all;
-    line-height: 1.1;
+    line-height: 1.2;
   }
   .word-btn:hover {
     border-color: #888;
@@ -503,12 +503,21 @@ function onSavePairs() {
   hasLocalChanges = false;
 }
 
-// ── Clear: purely client-side, no rerun ──────────────────────────
+// ── Clear: clear selections and delete saved pairs from database ──
 function onClearSelections() {
+  if (!confirm('This will clear all selections and delete all saved pairs from the database. Continue?')) {
+    return;
+  }
   enSelections = {};
   zhSelections = {};
   hasLocalChanges = true;
   render();
+  // Notify Streamlit to delete pairs from database
+  Streamlit.setComponentValue({
+    action: 'clear_all',
+    en_selections: {},
+    zh_selections: {}
+  });
 }
 
 // ── Status bar + action bar ───────────────────────────────────────

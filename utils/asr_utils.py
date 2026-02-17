@@ -268,6 +268,9 @@ def get_cached_crisperwhisper_model():
 
 class ASRUtils:
 
+    # Last transcription error message (for UI display)
+    _last_error = None
+
     # 添加线程锁用于Google转录
     google_transcribe_lock = threading.Lock()
 
@@ -842,7 +845,9 @@ class ASRUtils:
         """
         try:
             if not check_funasr_available():
-                logger.error("FunASR is not installed. Install with: pip install funasr modelscope torch torchaudio")
+                err = "FunASR is not installed. Install with: pip install funasr modelscope torch torchaudio"
+                logger.error(err)
+                ASRUtils._last_error = err
                 import pandas as pd
                 return pd.DataFrame(), pd.DataFrame()
 
@@ -1060,9 +1065,11 @@ class ASRUtils:
             return words_df, segments_df
 
         except Exception as e:
-            logger.error(f"Error transcribing with FunASR: {str(e)}")
+            err = f"Error transcribing with FunASR: {str(e)}"
+            logger.error(err)
             import traceback
             logger.error(traceback.format_exc())
+            ASRUtils._last_error = err
             import pandas as pd
             return pd.DataFrame(), pd.DataFrame()
 
@@ -1087,7 +1094,9 @@ class ASRUtils:
         """
         try:
             if not check_crisperwhisper_available():
-                logger.error("CrisperWhisper requires HuggingFace transformers. Install with: pip install transformers torch torchaudio")
+                err = "CrisperWhisper requires HuggingFace transformers. Install with: pip install transformers torch torchaudio"
+                logger.error(err)
+                ASRUtils._last_error = err
                 return pd.DataFrame(), pd.DataFrame()
 
             if language != 'en':
@@ -1107,7 +1116,8 @@ class ASRUtils:
             # Load audio, ensure mono 16kHz for CrisperWhisper
             logger.info(f"Transcribing with CrisperWhisper: {file_path}")
             import torchaudio
-            waveform, sample_rate = torchaudio.load(file_path)
+            # Use soundfile backend to avoid torchcodec/FFmpeg DLL issues on Windows
+            waveform, sample_rate = torchaudio.load(file_path, backend="soundfile")
             logger.info(f"Audio loaded: shape={waveform.shape}, sr={sample_rate}")
             if waveform.shape[0] > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
@@ -1288,9 +1298,11 @@ class ASRUtils:
             return words_df, segments_df
 
         except Exception as e:
-            logger.error(f"Error transcribing with CrisperWhisper: {str(e)}")
+            err = f"Error transcribing with CrisperWhisper: {str(e)}"
+            logger.error(err)
             import traceback
             logger.error(traceback.format_exc())
+            ASRUtils._last_error = err
             return pd.DataFrame(), pd.DataFrame()
 
     @staticmethod
@@ -1311,6 +1323,7 @@ class ASRUtils:
         Returns:
             tuple: (words_df, segments_df)
         """
+        ASRUtils._last_error = None
         if provider == "funasr":
             return ASRUtils.transcribe_with_funasr(
                 file_path, provider, model_name, language,

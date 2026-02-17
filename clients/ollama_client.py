@@ -107,6 +107,22 @@ class OllamaClient:
                         logger.warning("Failed to parse JSON response, returning raw result")
                         return result
 
+                except httpx.ConnectError:
+                    error_msg = (
+                        f"Cannot connect to Ollama at {self.base_url}. "
+                        "Please make sure Ollama is running (start it with 'ollama serve')."
+                    )
+                    logger.error(error_msg)
+                    raise ConnectionError(error_msg)
+                except httpx.HTTPStatusError as chat_err:
+                    error_msg = (
+                        f"Ollama API not available at {self.base_url} "
+                        f"(HTTP {chat_err.response.status_code}). "
+                        "Please check that Ollama is running and the model is available "
+                        "(run 'ollama list' to verify)."
+                    )
+                    logger.error(error_msg)
+                    raise ConnectionError(error_msg)
                 except Exception as chat_err:
                     error_msg = f"Error using chat API: {chat_err}"
                     logger.error(error_msg, exc_info=True)
@@ -115,6 +131,14 @@ class OllamaClient:
             error_msg = f"Error generating response: {e}"
             logger.error(error_msg, exc_info=True)
             return error_msg
+
+        except httpx.ConnectError:
+            error_msg = (
+                f"Cannot connect to Ollama at {self.base_url}. "
+                "Please make sure Ollama is running (start it with 'ollama serve')."
+            )
+            logger.error(error_msg)
+            raise ConnectionError(error_msg)
 
         except Exception as e:
             error_msg = f"Error calling Ollama API: {e}"

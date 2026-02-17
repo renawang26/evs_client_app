@@ -2440,6 +2440,73 @@ def render_file_list_tab():
 
         st.divider()
 
+        # Audio Player
+        st.markdown("### 🔊 Audio Player")
+
+        audio_col1, audio_col2 = st.columns([2, 2])
+        with audio_col1:
+            audio_file_select = st.selectbox(
+                "Select file",
+                options=[""] + files_df['file_name'].unique().tolist(),
+                format_func=lambda x: "-- Select a file --" if x == "" else get_file_display_name(x),
+                key='audio_player_file'
+            )
+
+        if audio_file_select:
+            file_stem = os.path.splitext(audio_file_select)[0]
+            file_audio_dir = os.path.join(SLICE_AUDIO_PATH, file_stem)
+
+            # Original audio
+            original_path = os.path.join(file_audio_dir, "original.mp3")
+            if os.path.exists(original_path):
+                st.markdown("**Original Audio**")
+                st.audio(original_path)
+            else:
+                st.info("Original audio not available (only saved for new uploads).")
+
+            # Find all available sliced audio subdirectories (provider/model_folder)
+            audio_folders = []
+            if os.path.isdir(file_audio_dir):
+                for provider in sorted(os.listdir(file_audio_dir)):
+                    provider_dir = os.path.join(file_audio_dir, provider)
+                    if os.path.isdir(provider_dir):
+                        for model_folder in sorted(os.listdir(provider_dir)):
+                            model_dir = os.path.join(provider_dir, model_folder)
+                            if os.path.isdir(model_dir):
+                                mp3_files = sorted(
+                                    [f for f in os.listdir(model_dir) if f.endswith('.mp3')],
+                                    key=lambda f: int(os.path.splitext(f)[0]) if os.path.splitext(f)[0].isdigit() else 0
+                                )
+                                if mp3_files:
+                                    audio_folders.append({
+                                        'label': f"{provider} / {model_folder}",
+                                        'path': model_dir,
+                                        'files': mp3_files
+                                    })
+
+            if audio_folders:
+                with audio_col2:
+                    folder_labels = [f['label'] for f in audio_folders]
+                    selected_folder_label = st.selectbox(
+                        "Provider / Model",
+                        options=folder_labels,
+                        index=0,
+                        key='audio_player_folder'
+                    )
+                selected_folder = next(f for f in audio_folders if f['label'] == selected_folder_label)
+
+                st.markdown(f"**Sliced Audio — {len(selected_folder['files'])} segments**")
+
+                for mp3_file in selected_folder['files']:
+                    mp3_path = os.path.join(selected_folder['path'], mp3_file)
+                    slice_num = os.path.splitext(mp3_file)[0]
+                    st.markdown(f"**Slice {slice_num}**")
+                    st.audio(mp3_path)
+            else:
+                st.info("No sliced audio files found for this file.")
+
+        st.divider()
+
         # File Content Viewer
         st.markdown("### 📄 View File Content")
 
@@ -2977,12 +3044,13 @@ def display_edit_transcription(interpret_file: str, slice_duration: int, en_prov
             loading_progress.progress(progress_pct)
             loading_text.text(f"Rendering time group {idx + 1} of {total_groups}...")
 
-        # create audio path, using group number
-        audio_path = os.path.join(
-            SLICE_AUDIO_PATH,
-            os.path.splitext(interpret_file)[0],
-            f'{group_number}.mp3'
-        )
+        # create audio path, using group number with provider/model subfolder
+        file_stem = os.path.splitext(interpret_file)[0]
+        model_folder = f"{en_model}_{zh_model}" if en_model and zh_model else None
+        if model_folder:
+            audio_path = os.path.join(SLICE_AUDIO_PATH, file_stem, en_provider, model_folder, f'{group_number}.mp3')
+        else:
+            audio_path = os.path.join(SLICE_AUDIO_PATH, file_stem, f'{group_number}.mp3')
         col1, col2 = st.columns([2, 3])
         with col1:
             st.header(f"Time: {time_group_key}")
@@ -3509,7 +3577,7 @@ def render_annotate_evs_tab():
         return
 
     # Row 1: File selection, model pair, buttons
-    col1, col2, col3, col4, col_auto, col5 = st.columns([1, 2, 1, 1, 1, 0.3])
+    col1, col2, col_auto, col5 = st.columns([1, 2, 1, 0.3])
 
     with col1:
         # File selection dropdown - no default selection
@@ -3565,55 +3633,6 @@ def render_annotate_evs_tab():
     en_provider = evs_file_info['en_provider'] if evs_file_info else 'crisperwhisper'
     zh_provider = evs_file_info['zh_provider'] if evs_file_info else 'funasr'
     evs_model = evs_file_info['en_model'] if evs_file_info and evs_file_info['en_model'] else (evs_file_info['zh_model'] if evs_file_info else None)
-
-    with col3:
-        if st.button('Save Pairs', type="primary", key="save_pair_button"):
-            # Use per-language providers
-            success = save_pair_button_handler(
-                interpret_file,
-                asr_provider=en_provider,
-                source_provider=en_provider,
-                target_provider=zh_provider
-            )
-            if success:
-                st.success("Pairs saved!")
-                # Clear cached data to reload from database (match evs_client_simple)
-                if 'existing_evs_pairs' in st.session_state:
-                    del st.session_state.existing_evs_pairs
-                if 'table_data' in st.session_state:
-                    del st.session_state.table_data
-                st.session_state.selections_initialized = False
-                time.sleep(0.5)
-                st.session_state.evs_processing = True
-                st.rerun()
-
-    with col4:
-        col4_1, col4_2 = st.columns(2)
-        with col4_1:
-            if st.button('Clear Selections', key="clear_selections", help="Clear current word selections"):
-                st.session_state.en_selections = {}
-                st.session_state.zh_selections = {}
-                st.session_state.selections_initialized = False
-                st.success("Cleared")
-                time.sleep(0.5)
-                st.session_state.evs_processing = True
-                st.rerun()
-
-        with col4_2:
-            if st.button('Delete All Pairs', key="delete_all_pairs", help="Delete all saved pairs from database"):
-                if EVSDataUtils.reset_evs(interpret_file):
-                    st.success("Deleted")
-                    # Clear cached data (match evs_client_simple)
-                    if 'existing_evs_pairs' in st.session_state:
-                        del st.session_state.existing_evs_pairs
-                    if 'table_data' in st.session_state:
-                        del st.session_state.table_data
-                    st.session_state.selections_initialized = False
-                    time.sleep(0.5)
-                    st.session_state.evs_processing = True
-                    st.rerun()
-                else:
-                    st.error("Failed")
 
     with col_auto:
         auto_align_clicked = st.button(
@@ -3702,122 +3721,16 @@ def render_annotate_evs_tab():
     if 'selected_pairs' not in st.session_state:
         st.session_state.selected_pairs = {}
 
-    left_col, right_col = st.columns([1, 3])
+    slice_duration = evs_file_info['slice_duration'] if evs_file_info else 30
+    en_model = evs_file_info['en_model'] if evs_file_info else None
+    zh_model = evs_file_info['zh_model'] if evs_file_info else None
+    display_evs_annotate_table(interpret_file, slice_duration, en_provider, zh_provider, source_lang, target_lang, evs_model, en_model, zh_model)
 
-    with right_col:
-        slice_duration = evs_file_info['slice_duration'] if evs_file_info else 30
-        display_evs_annotate_table(interpret_file, slice_duration, en_provider, zh_provider, source_lang, target_lang, evs_model)
-
-    with left_col:
-        # Display current selections (what user has selected in the table)
-        if hasattr(st.session_state, 'en_selections') and hasattr(st.session_state, 'zh_selections'):
-            en_selections = list(st.session_state.en_selections.values())
-            zh_selections = list(st.session_state.zh_selections.values())
-
-            if en_selections or zh_selections:
-                st.subheader("Current Selections")
-
-                # Sort selections by time
-                en_selections = sorted(en_selections, key=lambda x: float(x['time']))
-                zh_selections = sorted(zh_selections, key=lambda x: float(x['time']))
-
-                # Create preview of pairs that will be created
-                current_pairs = []
-                pair_count = min(len(en_selections), len(zh_selections))
-
-                for i in range(pair_count):
-                    en = en_selections[i]
-                    zh = zh_selections[i]
-                    evs = float(zh['time']) - float(en['time'])
-
-                    current_pairs.append({
-                        'Pair': i + 1,
-                        'en_time': f"{float(en['time']):.3f}",
-                        'en': en['word'],
-                        'zh_time': f"{float(zh['time']):.3f}",
-                        'zh': zh['word'],
-                        'EVS': evs
-                    })
-
-                if current_pairs:
-                    current_df = pd.DataFrame(current_pairs)
-                    st.dataframe(
-                        current_df,
-                        hide_index=True,
-                        column_config={
-                            'Pair': st.column_config.NumberColumn('Pair'),
-                            'en_time': st.column_config.TextColumn('en_time', width='small'),
-                            'en': st.column_config.TextColumn('en', width='small'),
-                            'zh_time': st.column_config.TextColumn('zh_time', width='small'),
-                            'zh': st.column_config.TextColumn('zh', width='small'),
-                            'EVS': st.column_config.NumberColumn('EVS', width='small', format="%.3f")
-                        }
-                    )
-
-                    # Show selection counts
-                    st.info(f"Selected: {len(en_selections)} English, {len(zh_selections)} Chinese words")
-                    if len(en_selections) != len(zh_selections):
-                        st.warning(f"Unequal selections: {pair_count} pairs will be created")
-                else:
-                    st.info("No word pairs selected yet")
-            else:
-                st.info("No words selected yet")
-
-        st.divider()
-
-        # Use cached EVS pairs (already loaded in get_evs_data)
-        saved_evs_data = st.session_state.get('existing_evs_pairs', pd.DataFrame())
-        if not saved_evs_data.empty:
-            existing_pairs = {}
-            for _, row in saved_evs_data.iterrows():
-                # Convert floating point numbers to strings and format them
-                en_time = f"{row['en_start_time']:.3f}"
-                zh_time = f"{row['zh_start_time']:.3f}"
-                existing_pairs[row['pair_seq']] = {
-                    'en_time': en_time,
-                    'en': row['en_edit_word'],
-                    'zh_time': zh_time,
-                    'zh': row['zh_edit_word'],
-                    'evs': float(row['EVS'])
-                }
-
-            pairs_df = pd.DataFrame([
-                {
-                    'Pair': pair_seq,
-                    'en_time': pair_data['en_time'],
-                    'en': pair_data['en'],
-                    'zh_time': pair_data['zh_time'],
-                    'zh': pair_data['zh'],
-                    'EVS': pair_data['evs']
-                }
-                for pair_seq, pair_data in existing_pairs.items()
-            ]).sort_values('Pair')
-
-            st.subheader("Saved Pairs (Database)")
-            st.dataframe(
-                pairs_df,
-                hide_index=True,
-                column_config={
-                    'Pair': st.column_config.NumberColumn('Pair'),
-                    'en_time': st.column_config.TextColumn('en_time', width='small'),
-                    'en': st.column_config.TextColumn('en', width='small'),
-                    'zh_time': st.column_config.TextColumn('zh_time', width='small'),
-                    'zh': st.column_config.TextColumn('zh', width='small'),
-                    'EVS': st.column_config.NumberColumn('EVS', width='small', format="%.3f")
-                }
-            )
-        else:
-            st.info("No saved pairs in database yet")
-
-def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_provider: str, zh_provider: str, source_lang: str = 'en', target_lang: str = 'zh', model: str = None):
-    """Display EVS annotate table with selectable display style.
+def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_provider: str, zh_provider: str, source_lang: str = 'en', target_lang: str = 'zh', model: str = None, en_model: str = None, zh_model: str = None):
+    """Display EVS annotate table with compact button-based annotation view.
 
     Always shows both languages (EN and ZH), with dynamic labels based on source/target selection.
     en_provider and zh_provider allow different ASR providers per language.
-
-    Supports two display styles:
-    - Compact (Buttons): Word buttons arranged in time-based rows
-    - Classic (Table with Checkboxes): Traditional data editor with checkboxes
     """
     # Style selector and configuration - load from database
     if 'evs_display_config_loaded' not in st.session_state:
@@ -3841,56 +3754,42 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
             st.session_state.evs_word_size = 14
         st.session_state.evs_display_config_loaded = True
 
-    style_col, config_col1, config_col2, save_col = st.columns([3, 1, 1, 1])
-
-    with style_col:
-        display_style = st.radio(
-            "Display Style",
-            options=["Compact (Buttons)", "Classic (Table with Checkboxes)"],
-            index=0 if st.session_state.evs_display_style == "Compact (Buttons)" else 1,
-            horizontal=True,
-            key="evs_style_selector",
-            label_visibility="collapsed"
-        )
-        st.session_state.evs_display_style = display_style
+    config_col1, config_col2, save_col = st.columns([1, 1, 1])
 
     with config_col1:
-        if display_style == "Compact (Buttons)":
-            seconds_per_row = st.number_input(
-                "Sec/Row",
-                min_value=1,
-                max_value=30,
-                value=st.session_state.evs_seconds_per_row,
-                step=1,
-                key="evs_seconds_per_row_input"
-            )
-            st.session_state.evs_seconds_per_row = seconds_per_row
+        seconds_per_row = st.number_input(
+            "Sec/Row",
+            min_value=1,
+            max_value=30,
+            value=st.session_state.evs_seconds_per_row,
+            step=1,
+            key="evs_seconds_per_row_input"
+        )
+        st.session_state.evs_seconds_per_row = seconds_per_row
 
     with config_col2:
-        if display_style == "Compact (Buttons)":
-            word_size = st.number_input(
-                "Font Size",
-                min_value=10,
-                max_value=24,
-                value=st.session_state.evs_word_size,
-                step=2,
-                key="evs_word_size_input"
-            )
-            st.session_state.evs_word_size = word_size
+        word_size = st.number_input(
+            "Font Size",
+            min_value=10,
+            max_value=24,
+            value=st.session_state.evs_word_size,
+            step=2,
+            key="evs_word_size_input"
+        )
+        st.session_state.evs_word_size = word_size
 
     with save_col:
-        if display_style == "Compact (Buttons)":
-            st.write("")  # Spacer for alignment
-            if st.button("Save", key="save_evs_display_config"):
-                config_to_save = {
-                    'style': st.session_state.evs_display_style,
-                    'seconds_per_row': st.session_state.evs_seconds_per_row,
-                    'word_size': st.session_state.evs_word_size
-                }
-                if EVSDataUtils.save_asr_config('evs_display_settings', config_to_save):
-                    st.success("Saved!")
-                else:
-                    st.error("Failed")
+        st.write("")  # Spacer for alignment
+        if st.button("Save", key="save_evs_display_config"):
+            config_to_save = {
+                'style': "Compact (Buttons)",
+                'seconds_per_row': st.session_state.evs_seconds_per_row,
+                'word_size': st.session_state.evs_word_size
+            }
+            if EVSDataUtils.save_asr_config('evs_display_settings', config_to_save):
+                st.success("Saved!")
+            else:
+                st.error("Failed")
 
     # Check if this is the initial render (not a rerun from checkbox selection)
     table_render_key = f"table_rendered_{interpret_file}_{model}"
@@ -3918,10 +3817,6 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
         progress_bar.progress(30)
         progress_text.text("Processing data...")
 
-    # Create dynamic labels - first row is always source_lang, second row is always target_lang
-    en_label = "English (Source)" if source_lang == 'en' else "English (Target)"
-    zh_label = "Chinese (Source)" if source_lang == 'zh' else "Chinese (Target)"
-
     # Color palette for EVS pairs - distinct colors for easy visual identification
     PAIR_COLORS = [
         '#FF6B6B',  # Red
@@ -3947,10 +3842,9 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
             return None
         return PAIR_COLORS[(pair_seq - 1) % len(PAIR_COLORS)]
 
-    # Apply custom font size and compact spacing CSS for Compact style (once, before loop)
-    if display_style == "Compact (Buttons)":
-        word_size = st.session_state.get('evs_word_size', 14)
-        st.markdown(f"""
+    # Apply custom font size and compact spacing CSS (once, before loop)
+    word_size = st.session_state.get('evs_word_size', 14)
+    st.markdown(f"""
         <style>
             /* Font size for buttons */
             [data-testid="stVerticalBlock"] button p {{
@@ -4035,22 +3929,19 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
         seconds = int(time_group_key.split(':')[1])
         group_number = int((minutes * 60 + seconds) / slice_duration)
 
-        # Audio player
-        audio_path = os.path.join(
-            SLICE_AUDIO_PATH,
-            os.path.splitext(interpret_file)[0],
-            f'{group_number}.mp3'
-        )
-
-        if display_style != "Compact (Buttons)":
-            col_1, col_2 = st.columns([2, 3])
-
-            with col_1:
-                st.header(f"Time: {time_group_key}")
-
-            with col_2:
-                if os.path.exists(audio_path):
-                    st.audio(audio_path, start_time=0)
+        # Audio player - build path with provider/model subfolders
+        file_stem = os.path.splitext(interpret_file)[0]
+        model_folder = f"{en_model}_{zh_model}" if en_model and zh_model else None
+        if model_folder:
+            audio_path = os.path.join(
+                SLICE_AUDIO_PATH, file_stem, en_provider, model_folder,
+                f'{group_number}.mp3'
+            )
+        else:
+            audio_path = os.path.join(
+                SLICE_AUDIO_PATH, file_stem,
+                f'{group_number}.mp3'
+            )
 
         # Get all unique timestamps for this group - sort using time_str_to_seconds for MM:SS.xx format
         all_timestamps = sorted(group['time_str'].unique(), key=time_str_to_seconds)
@@ -4098,157 +3989,35 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
                 zh_words.append(word_info)
                 zh_metadata[ts] = word_info
 
-        # === COMPACT STYLE (Buttons) — collect data for custom component ===
-        if display_style == "Compact (Buttons)":
-            combined_words = []
-            for ts in all_timestamps:
-                en_info = en_metadata.get(ts)
-                zh_info = zh_metadata.get(ts)
-                if en_info or zh_info:
-                    combined_words.append({
-                        'ts': ts,
-                        'ts_float': float(ts),
-                        'en': en_info,
-                        'zh': zh_info
-                    })
-            # Encode audio as base64 data URI for the component
-            audio_data_uri = None
-            if os.path.exists(audio_path):
-                try:
-                    with open(audio_path, 'rb') as af:
-                        audio_b64 = base64.b64encode(af.read()).decode('ascii')
-                    audio_data_uri = f"data:audio/mpeg;base64,{audio_b64}"
-                except Exception:
-                    pass
-            compact_groups_data.append({
-                'time_group_key': time_group_key,
-                'words': combined_words,
-                'audio_src': audio_data_uri,
-            })
+        # Collect word data for custom component
+        combined_words = []
+        for ts in all_timestamps:
+            en_info = en_metadata.get(ts)
+            zh_info = zh_metadata.get(ts)
+            if en_info or zh_info:
+                combined_words.append({
+                    'ts': ts,
+                    'ts_float': float(ts),
+                    'en': en_info,
+                    'zh': zh_info
+                })
+        # Encode audio as base64 data URI for the component
+        audio_data_uri = None
+        if os.path.exists(audio_path):
+            try:
+                with open(audio_path, 'rb') as af:
+                    audio_b64 = base64.b64encode(af.read()).decode('ascii')
+                audio_data_uri = f"data:audio/mpeg;base64,{audio_b64}"
+            except Exception:
+                pass
+        compact_groups_data.append({
+            'time_group_key': time_group_key,
+            'words': combined_words,
+            'audio_src': audio_data_uri,
+        })
 
-        # === CLASSIC STYLE (Table with Checkboxes) ===
-        else:
-            chunk_timestamps = all_timestamps
-            en_words_data = {w['ts']: w['word'] for w in en_words}
-            zh_words_data = {w['ts']: w['word'] for w in zh_words}
-
-            # Build display_df from session_state selections
-            en_row = {'Language': en_label}
-            zh_row = {'Language': zh_label}
-
-            for ts in chunk_timestamps:
-                sel_col = f"{ts}_sel"
-
-                if ts in en_metadata:
-                    en_key = f"en_{en_metadata[ts]['segment_id']}_{en_metadata[ts]['word_seq_no']}"
-                    en_row[sel_col] = en_key in st.session_state.en_selections
-                    en_row[ts] = en_words_data[ts]
-                else:
-                    en_row[ts] = ""
-
-                if ts in zh_metadata:
-                    zh_key = f"zh_{zh_metadata[ts]['segment_id']}_{zh_metadata[ts]['word_seq_no']}"
-                    zh_row[sel_col] = zh_key in st.session_state.zh_selections
-                    zh_row[ts] = zh_words_data[ts]
-                else:
-                    zh_row[ts] = ""
-
-            display_df = pd.DataFrame([en_row, zh_row])
-
-            # Set up column configuration
-            column_config = {
-                "Language": st.column_config.TextColumn("Lang", width="small")
-            }
-
-            for ts in chunk_timestamps:
-                has_en_word = ts in en_metadata
-                has_zh_word = ts in zh_metadata
-
-                if has_en_word or has_zh_word:
-                    column_config[f"{ts}_sel"] = st.column_config.CheckboxColumn(
-                        "Sel",
-                        width="small",
-                        default=False
-                    )
-                column_config[ts] = st.column_config.TextColumn(ts, width="small")
-
-            # Calculate column order
-            column_order = ["Language"]
-            for ts in chunk_timestamps:
-                if ts in en_metadata or ts in zh_metadata:
-                    column_order.extend([f"{ts}_sel", ts])
-                else:
-                    column_order.append(ts)
-
-            # Display the table with data editor
-            edited_df = st.data_editor(
-                display_df,
-                column_config=column_config,
-                disabled=["Language"] + chunk_timestamps,
-                hide_index=True,
-                key=f"evs_table_{interpret_file}_{model}_{time_group_key}",
-                column_order=column_order
-            )
-
-            # Process changes from the data editor
-            selection_changed = False
-            if edited_df is not None:
-                # Process English selections (row 0)
-                en_edited = edited_df.iloc[0]
-                for ts in chunk_timestamps:
-                    if ts in en_metadata and f"{ts}_sel" in en_edited:
-                        en_segment_id = en_metadata[ts]['segment_id']
-                        en_word_seq_no = en_metadata[ts]['word_seq_no']
-                        en_key = f"en_{en_segment_id}_{en_word_seq_no}"
-
-                        is_selected = en_edited[f"{ts}_sel"]
-                        was_selected = en_key in st.session_state.en_selections
-
-                        if is_selected and not was_selected:
-                            st.session_state.en_selections[en_key] = {
-                                'time': en_metadata[ts]['start_time'],
-                                'word': en_edited[ts],
-                                'segment_id': en_segment_id,
-                                'word_seq_no': en_word_seq_no
-                            }
-                            selection_changed = True
-                        elif not is_selected and was_selected:
-                            del st.session_state.en_selections[en_key]
-                            selection_changed = True
-
-                # Process Chinese selections (row 1)
-                zh_edited = edited_df.iloc[1]
-                for ts in chunk_timestamps:
-                    if ts in zh_metadata and f"{ts}_sel" in zh_edited:
-                        zh_segment_id = zh_metadata[ts]['segment_id']
-                        zh_word_seq_no = zh_metadata[ts]['word_seq_no']
-                        zh_key = f"zh_{zh_segment_id}_{zh_word_seq_no}"
-
-                        is_selected = zh_edited[f"{ts}_sel"]
-                        was_selected = zh_key in st.session_state.zh_selections
-
-                        if is_selected and not was_selected:
-                            st.session_state.zh_selections[zh_key] = {
-                                'time': zh_metadata[ts]['start_time'],
-                                'word': zh_edited[ts],
-                                'segment_id': zh_segment_id,
-                                'word_seq_no': zh_word_seq_no
-                            }
-                            selection_changed = True
-                        elif not is_selected and was_selected:
-                            del st.session_state.zh_selections[zh_key]
-                            selection_changed = True
-
-            if selection_changed:
-                st.session_state.evs_processing = True
-                st.rerun()
-
-        # Add separator between time groups (Classic style only)
-        if display_style != "Compact (Buttons)":
-            st.markdown("---")
-
-    # === Render custom component for Compact mode (after data collection) ===
-    if display_style == "Compact (Buttons)" and compact_groups_data:
+    # === Render custom component (after data collection) ===
+    if compact_groups_data:
         seconds_per_row = st.session_state.get('evs_seconds_per_row', 25)
         word_size = st.session_state.get('evs_word_size', 14)
 
@@ -4261,11 +4030,10 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
             key=f"evs_annotator_{interpret_file}_{model}",
         )
 
-        # Handle save_pairs action from component (only rerun trigger)
+        # Handle actions from component
         if result and result.get('action') == 'save_pairs':
             st.session_state.en_selections = result.get('en_selections', {})
             st.session_state.zh_selections = result.get('zh_selections', {})
-            # Save directly (same logic as the Save Pairs st.button)
             success = save_pair_button_handler(
                 interpret_file,
                 asr_provider=en_provider,
@@ -4274,6 +4042,20 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
             )
             if success:
                 st.success("Pairs saved!")
+                if 'existing_evs_pairs' in st.session_state:
+                    del st.session_state.existing_evs_pairs
+                if 'table_data' in st.session_state:
+                    del st.session_state.table_data
+                st.session_state.selections_initialized = False
+                st.session_state.en_selections = {}
+                st.session_state.zh_selections = {}
+                time.sleep(0.5)
+                st.session_state.evs_processing = True
+                st.rerun()
+
+        if result and result.get('action') == 'clear_all':
+            if EVSDataUtils.reset_evs(interpret_file):
+                st.success("All pairs deleted from database.")
                 if 'existing_evs_pairs' in st.session_state:
                     del st.session_state.existing_evs_pairs
                 if 'table_data' in st.session_state:
@@ -4506,9 +4288,8 @@ def render_analysis_concordance_tab():
         # Determine which ASR provider to use based on language selection
         if concordance_selected_pair:
             if concordance_language == 'All':
-                # For "All" language, we need both providers - pass en_provider as primary
-                # The data fetch functions will need to handle getting data from both providers
-                concordance_asr_provider = concordance_en_provider
+                # For "All" language, pass 'All' so DB functions search across all providers
+                concordance_asr_provider = 'All'
             elif concordance_language == 'en':
                 concordance_asr_provider = concordance_en_provider
             else:  # zh
@@ -5729,6 +5510,14 @@ If the detection is incorrect, manually change the Channel Language dropdowns ab
                         temp_file.write(uploaded_file.getbuffer())
                         audio_file = temp_file.name
 
+                    # Save original audio for playback
+                    original_audio_path = os.path.join(target_path, "original.mp3")
+                    if not os.path.exists(original_audio_path):
+                        uploaded_file.seek(0)
+                        with open(original_audio_path, 'wb') as f:
+                            f.write(uploaded_file.getbuffer())
+                        logger.info(f"Saved original audio to {original_audio_path}")
+
                     target_path = f"{SLICE_AUDIO_PATH}/{os.path.splitext(uploaded_file.name)[0]}"
 
                     container.write(f"Transcribing {audio_file}...")
@@ -5811,7 +5600,8 @@ If the detection is incorrect, manually change the Channel Language dropdowns ab
                                 save_asr_result_to_database(words_data_1, segments_data_1)
                                 st.success(f"Channel 1 ({actual_lang1}) - Results saved to database - {file_alias}")
                             else:
-                                st.error(f"Failed to transcribe channel 1 - {file_alias}")
+                                error_detail = ASRUtils._last_error or "No transcription results returned"
+                                st.error(f"Failed to transcribe channel 1 - {file_alias}: {error_detail}")
 
                     # Process second channel if available (Chinese for pre-separated)
                     if channel2_path:
@@ -5838,7 +5628,8 @@ If the detection is incorrect, manually change the Channel Language dropdowns ab
                                 save_asr_result_to_database(words_data_2, segments_data_2)
                                 st.success(f"Channel 2 ({actual_lang2}) - Results saved to database - {file_alias}")
                             else:
-                                st.error(f"Failed to transcribe channel 2 - {file_alias}")
+                                error_detail = ASRUtils._last_error or "No transcription results returned"
+                                st.error(f"Failed to transcribe channel 2 - {file_alias}: {error_detail}")
                     else:
                         if not is_pre_separated:
                             st.error("The audio file must have two channels.")
@@ -7837,10 +7628,15 @@ Please reply in Chinese, in JSON format:
             response = llm_client.generate(analysis_prompt)
             logger.info(f"LLM analysis response received, length: {len(response) if response else 0}")
 
-            if not response or response.startswith("Error:"):
+            if not response or response.startswith("Error") or "Error" in response:
                 logger.error(f"LLM analysis failed: {response}")
+                st.error(f"LLM server error: {response}")
                 raise Exception(f"LLM response error: {response}")
 
+        except ConnectionError as ce:
+            logger.error(f"LLM connection failed: {str(ce)}")
+            st.error(str(ce))
+            raise
         except Exception as llm_error:
             logger.error(f"LLM analysis call failed: {str(llm_error)}")
             raise Exception(f"LLM service unavailable: {str(llm_error)}")
@@ -8088,12 +7884,14 @@ Note: en_time and zh_time must be different, because this is simultaneous interp
                         logger.debug(f"Response preview: {response[:300]}...")
 
                         # Check for error messages in response
-                        if response.startswith("Error:") or "Error" in response:
+                        if response.startswith("Error") or "Error" in response:
                             logger.error(f"LLM returned error response: {response}")
-                            continue
+                            st.error(f"LLM server error: {response}")
+                            return []
                     else:
                         logger.error("LLM returned empty response!")
-                        continue
+                        st.error("LLM returned empty response. Please check that the LLM server is running.")
+                        return []
 
                     # Parse LLM response
                     batch_pairs = parse_llm_pairing_response(response)
@@ -8101,9 +7899,14 @@ Note: en_time and zh_time must be different, because this is simultaneous interp
 
                     logger.info(f"Batch {batch_num}: Found {len(batch_pairs)} pairs")
 
+                except ConnectionError as ce:
+                    logger.error(f"LLM connection failed: {str(ce)}")
+                    st.error(str(ce))
+                    return []
                 except Exception as llm_error:
                     logger.error(f"LLM call failed for batch {batch_num}: {str(llm_error)}", exc_info=True)
-                    continue
+                    st.error(f"LLM call failed: {str(llm_error)}")
+                    return []
 
             except Exception as e:
                 logger.warning(f"Error processing batch {batch_start//batch_size + 1}: {str(e)}")

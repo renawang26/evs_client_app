@@ -1258,11 +1258,14 @@ class EVSDataUtils:
                 SELECT *
                 FROM asr_results_words
                 WHERE edit_word IS NOT NULL
-                AND asr_provider = ?
             """
 
             params = []
             conditions = []
+
+            if asr_provider != 'All':
+                conditions.append("asr_provider = ?")
+                params.append(asr_provider)
 
             if interpret_file != 'All':
                 conditions.append("file_name = ?")
@@ -1279,7 +1282,7 @@ class EVSDataUtils:
 
             # Execute query
             with EVSDataUtils.get_db_connection() as conn:
-                df = pd.read_sql_query(query, conn, params=[asr_provider] + params)
+                df = pd.read_sql_query(query, conn, params=params)
             return df
         except Exception as e:
             logger.error(f"Error getting search words: {str(e)}")
@@ -1522,10 +1525,12 @@ class EVSDataUtils:
                 SELECT edit_word, lang, COUNT(*) as frequency
                 FROM asr_results_words
                 WHERE edit_word IS NOT NULL
-                AND asr_provider = ?
             """
-            target_params = [asr_provider]
+            target_params = []
 
+            if asr_provider != 'All':
+                target_query += " AND asr_provider = ?"
+                target_params.append(asr_provider)
             if target_file != 'All':
                 target_query += " AND file_name = ?"
                 target_params.append(target_file)
@@ -1539,10 +1544,12 @@ class EVSDataUtils:
                 SELECT edit_word, lang, COUNT(*) as frequency
                 FROM asr_results_words
                 WHERE edit_word IS NOT NULL
-                AND asr_provider = ?
             """
-            ref_params = [asr_provider]
+            ref_params = []
 
+            if asr_provider != 'All':
+                ref_query += " AND asr_provider = ?"
+                ref_params.append(asr_provider)
             if reference_file != 'All':
                 ref_query += " AND file_name = ?"
                 ref_params.append(reference_file)
@@ -1573,11 +1580,14 @@ class EVSDataUtils:
                 SELECT *
                 FROM asr_results_words
                 WHERE edit_word IS NOT NULL
-                AND asr_provider = ?
             """
 
             params = []
             conditions = []
+
+            if asr_provider != 'All':
+                conditions.append("asr_provider = ?")
+                params.append(asr_provider)
 
             if file_name != 'All':
                 conditions.append("file_name = ?")
@@ -1594,7 +1604,7 @@ class EVSDataUtils:
 
             # Execute query
             with EVSDataUtils.get_db_connection() as conn:
-                df = pd.read_sql_query(query, conn, params=[asr_provider] + params)
+                df = pd.read_sql_query(query, conn, params=params)
 
                 return df
         except Exception as e:

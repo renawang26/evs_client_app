@@ -16,8 +16,15 @@ Access at http://localhost:8501
 
 ### Install Dependencies
 ```bash
-conda create -n evs python=3.10
-conda activate evs
+# Automated setup (recommended):
+setup.bat                # First-time setup (skip if env exists)
+setup.bat --reinstall    # Remove env and redo full setup
+
+# Manual setup:
+conda create -n cw_evs_app python=3.11
+conda activate cw_evs_app
+conda install -c conda-forge ffmpeg
+conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia
 pip install -r requirements.txt
 ```
 
@@ -138,7 +145,7 @@ GitHub Actions workflow (`.github/workflows/python-app.yml`) runs on push/PR to 
 
 ## Dependencies & Constraints
 
-- **Python**: 3.10+ (CI uses 3.11)
+- **Python**: 3.11 (CI and setup.bat both use 3.11)
 - **FFmpeg**: Required for audio processing
 - **protobuf**: Must be `>=3.20,<4` for HanLP compatibility
 - **numpy**: Must be `<2.0`
