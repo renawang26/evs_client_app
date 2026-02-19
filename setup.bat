@@ -58,14 +58,14 @@ REM ============================================================
 echo.
 echo [3/4] Setting up Conda environment [cw_evs_app]...
 
-call conda env list | findstr /C:"cw_evs_app" >nul 2>&1
+cmd /c "conda env list | findstr /C:cw_evs_app" >nul 2>&1
 if not errorlevel 1 (
     if %REINSTALL% equ 1 (
         echo       Removing existing environment...
         call conda deactivate
-        call conda env remove -n cw_evs_app -y
+        cmd /c conda env remove -n cw_evs_app -y
         echo       Creating new environment [Python 3.11]...
-        call conda create -n cw_evs_app python=3.11 -y
+        cmd /c conda create -n cw_evs_app python=3.11 -y
     ) else (
         echo       Environment 'cw_evs_app' already exists. Skipping.
         echo       Use 'setup.bat --reinstall' to recreate.
@@ -73,7 +73,7 @@ if not errorlevel 1 (
     )
 ) else (
     echo       Creating new environment [Python 3.11]...
-    call conda create -n cw_evs_app python=3.11 -y
+    cmd /c conda create -n cw_evs_app python=3.11 -y
 )
 
 :activate
@@ -93,37 +93,37 @@ echo       Environment activated: %CONDA_DEFAULT_ENV%
 
 REM Install FFmpeg via conda
 echo       Installing FFmpeg via conda...
-call conda install -c conda-forge ffmpeg -y
+cmd /c conda install -c conda-forge ffmpeg -y
 
 REM Verify FFmpeg is available in the environment
 echo       Verifying FFmpeg installation...
 where ffmpeg >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo [WARNING] FFmpeg could not be verified after conda install.
-    echo           Audio processing and CrisperWhisper transcription will not work.
-    echo.
-    echo           Please install FFmpeg manually using one of these methods:
-    echo.
-    echo           Option 1 - Winget (Windows 10/11, recommended):
-    echo             winget install --id=Gyan.FFmpeg -e
-    echo.
-    echo           Option 2 - Chocolatey:
-    echo             choco install ffmpeg
-    echo.
-    echo           Option 3 - Manual download:
-    echo             1. Go to https://www.gyan.dev/ffmpeg/builds/
-    echo             2. Download "ffmpeg-release-essentials.zip"
-    echo             3. Extract to C:\ffmpeg
-    echo             4. Add C:\ffmpeg\bin to your system PATH
-    echo                ^(Control Panel -^> System -^> Advanced -^> Environment Variables^)
-    echo             5. Reopen this terminal and run setup.bat again
-    echo.
-    echo           After installing FFmpeg, re-run: setup.bat
-    echo.
-) else (
-    echo       FFmpeg installed successfully.
-)
+if not errorlevel 1 goto :ffmpeg_ok
+echo.
+echo [WARNING] FFmpeg could not be verified after conda install.
+echo           Audio processing and CrisperWhisper transcription will not work.
+echo.
+echo           Please install FFmpeg manually using one of these methods:
+echo.
+echo           Option 1 - Winget (Windows 10/11, recommended):
+echo             winget install --id=Gyan.FFmpeg -e
+echo.
+echo           Option 2 - Chocolatey:
+echo             choco install ffmpeg
+echo.
+echo           Option 3 - Manual download:
+echo             1. Go to https://www.gyan.dev/ffmpeg/builds/
+echo             2. Download "ffmpeg-release-essentials.zip"
+echo             3. Extract to C:\ffmpeg
+echo             4. Add C:\ffmpeg\bin to your system PATH
+echo             5. Reopen this terminal and run setup.bat again
+echo.
+echo           After installing FFmpeg, re-run: setup.bat
+echo.
+goto :ffmpeg_done
+:ffmpeg_ok
+echo       FFmpeg installed successfully.
+:ffmpeg_done
 
 REM Install PyTorch via conda (before pip to avoid CPU-only wheels from pip mirrors)
 echo.
@@ -131,14 +131,14 @@ echo       Detecting GPU...
 nvidia-smi >nul 2>&1
 if not errorlevel 1 (
     echo       NVIDIA GPU detected. Installing PyTorch with CUDA via conda...
-    call conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y
+    cmd /c conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y
     if errorlevel 1 (
         echo       CUDA 12.4 failed, trying CUDA 12.1...
-        call conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
+        cmd /c conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
     )
 ) else (
     echo       No NVIDIA GPU detected. Installing CPU-only PyTorch via conda...
-    call conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+    cmd /c conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
 )
 
 REM Install pip dependencies (torch/torchaudio already installed by conda, not in requirements.txt)
