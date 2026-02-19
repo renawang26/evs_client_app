@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Shell scripts must always use LF (required for WSL/Linux execution)
+*.sh text eol=lf
+
+# Windows batch scripts use CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
