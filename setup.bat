@@ -97,10 +97,8 @@ call conda install -c conda-forge ffmpeg -y
 
 REM Verify FFmpeg is available in the environment
 echo       Verifying FFmpeg installation...
-ffmpeg -version >nul 2>&1
-if !errorLevel! equ 0 (
-    echo       FFmpeg installed successfully.
-) else (
+where ffmpeg >nul 2>&1
+if errorlevel 1 (
     echo.
     echo [WARNING] FFmpeg could not be verified after conda install.
     echo           Audio processing and CrisperWhisper transcription will not work.
@@ -118,11 +116,13 @@ if !errorLevel! equ 0 (
     echo             2. Download "ffmpeg-release-essentials.zip"
     echo             3. Extract to C:\ffmpeg
     echo             4. Add C:\ffmpeg\bin to your system PATH
-    echo                (Control Panel -^> System -^> Advanced -^> Environment Variables)
+    echo                ^(Control Panel -^> System -^> Advanced -^> Environment Variables^)
     echo             5. Reopen this terminal and run setup.bat again
     echo.
     echo           After installing FFmpeg, re-run: setup.bat
     echo.
+) else (
+    echo       FFmpeg installed successfully.
 )
 
 REM Install PyTorch via conda (before pip to avoid CPU-only wheels from pip mirrors)
