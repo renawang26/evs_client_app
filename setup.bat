@@ -48,12 +48,8 @@ where ffmpeg >nul 2>&1
 if !errorLevel! equ 0 (
     echo       FFmpeg found.
 ) else (
-    echo       FFmpeg not found.
-    echo.
-    echo [INFO] FFmpeg is required for audio processing.
-    echo        Install with conda: conda install -c conda-forge ffmpeg
-    echo        Or download from: https://ffmpeg.org/download.html
-    echo.
+    echo       FFmpeg not found on system PATH.
+    echo       Will attempt to install via conda in the next step.
 )
 
 REM ============================================================
@@ -98,6 +94,36 @@ echo       Environment activated: !CONDA_DEFAULT_ENV!
 REM Install FFmpeg via conda
 echo       Installing FFmpeg via conda...
 call conda install -c conda-forge ffmpeg -y
+
+REM Verify FFmpeg is available in the environment
+echo       Verifying FFmpeg installation...
+ffmpeg -version >nul 2>&1
+if !errorLevel! equ 0 (
+    echo       FFmpeg installed successfully.
+) else (
+    echo.
+    echo [WARNING] FFmpeg could not be verified after conda install.
+    echo           Audio processing and CrisperWhisper transcription will not work.
+    echo.
+    echo           Please install FFmpeg manually using one of these methods:
+    echo.
+    echo           Option 1 - Winget (Windows 10/11, recommended):
+    echo             winget install --id=Gyan.FFmpeg -e
+    echo.
+    echo           Option 2 - Chocolatey:
+    echo             choco install ffmpeg
+    echo.
+    echo           Option 3 - Manual download:
+    echo             1. Go to https://www.gyan.dev/ffmpeg/builds/
+    echo             2. Download "ffmpeg-release-essentials.zip"
+    echo             3. Extract to C:\ffmpeg
+    echo             4. Add C:\ffmpeg\bin to your system PATH
+    echo                (Control Panel -^> System -^> Advanced -^> Environment Variables)
+    echo             5. Reopen this terminal and run setup.bat again
+    echo.
+    echo           After installing FFmpeg, re-run: setup.bat
+    echo.
+)
 
 REM Install PyTorch via conda (before pip to avoid CPU-only wheels from pip mirrors)
 echo.

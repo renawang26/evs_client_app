@@ -1116,8 +1116,12 @@ class ASRUtils:
             # Load audio, ensure mono 16kHz for CrisperWhisper
             logger.info(f"Transcribing with CrisperWhisper: {file_path}")
             import torchaudio
-            # Use soundfile backend to avoid torchcodec/FFmpeg DLL issues on Windows
-            waveform, sample_rate = torchaudio.load(file_path, backend="soundfile")
+            # Use ffmpeg backend: supports all formats (MP3, WAV, M4A, etc.)
+            # soundfile doesn't support MP3, causing torchaudio to fall through to torchcodec
+            try:
+                waveform, sample_rate = torchaudio.load(file_path, backend="ffmpeg")
+            except Exception:
+                waveform, sample_rate = torchaudio.load(file_path, backend="soundfile")
             logger.info(f"Audio loaded: shape={waveform.shape}, sr={sample_rate}")
             if waveform.shape[0] > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
