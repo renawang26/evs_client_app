@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# EVS Navigation System - WSL/Linux Setup Script (Conda)
+# EVS Navigation System - WSL/Linux Setup Script
 # Usage: bash setup.sh              - Setup (skip if env exists)
 #        bash setup.sh --reinstall  - Remove env and redo full setup
+#
+# Strategy: conda creates the Python env ONLY. All packages installed via pip.
+# FFmpeg is a system binary (apt/brew), NOT a conda package.
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -17,7 +20,7 @@ for arg in "$@"; do
 done
 
 echo "============================================================"
-echo "  EVS Navigation System - Setup Script [Conda / WSL]"
+echo "  EVS Navigation System - Setup Script [WSL / Linux]"
 echo "============================================================"
 if [ "$REINSTALL" -eq 1 ]; then
     echo "  Mode: Force Reinstall"
@@ -46,7 +49,7 @@ else
 fi
 
 # ============================================================
-# Step 2 — Check FFmpeg (system)
+# Step 2 — Check / install FFmpeg (system binary, NOT conda)
 # ============================================================
 echo ""
 echo "[2/4] Checking FFmpeg installation..."
@@ -54,12 +57,32 @@ echo "[2/4] Checking FFmpeg installation..."
 if command -v ffmpeg &>/dev/null; then
     echo "      FFmpeg found: $(ffmpeg -version 2>&1 | head -1)"
 else
-    echo "      FFmpeg not found on system PATH."
-    echo "      Will attempt to install via conda in the next step."
+    echo "      FFmpeg not found. Attempting system install..."
+
+    if command -v apt-get &>/dev/null; then
+        echo "      Installing via apt..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg 2>/dev/null || true
+    elif command -v brew &>/dev/null; then
+        echo "      Installing via Homebrew..."
+        brew install ffmpeg 2>/dev/null || true
+    fi
+
+    if command -v ffmpeg &>/dev/null; then
+        echo "      FFmpeg installed successfully."
+    else
+        echo ""
+        echo "[WARNING] FFmpeg could not be installed automatically."
+        echo "          Audio processing will not work until FFmpeg is installed."
+        echo ""
+        echo "          Please install FFmpeg manually:"
+        echo "            Ubuntu/Debian: sudo apt install ffmpeg"
+        echo "            macOS:         brew install ffmpeg"
+        echo ""
+    fi
 fi
 
 # ============================================================
-# Step 3 — Create / activate Conda environment
+# Step 3 — Create / activate Conda environment (Python only)
 # ============================================================
 echo ""
 echo "[3/4] Setting up Conda environment [cw_evs_app]..."
@@ -99,48 +122,19 @@ fi
 echo "      Environment activated: $CONDA_DEFAULT_ENV"
 
 # ============================================================
-# Install FFmpeg via conda
-# ============================================================
-echo "      Installing FFmpeg via conda..."
-conda install -c conda-forge ffmpeg -y
-
-echo "      Verifying FFmpeg installation..."
-if command -v ffmpeg &>/dev/null; then
-    echo "      FFmpeg installed successfully."
-else
-    echo ""
-    echo "[WARNING] FFmpeg could not be verified after conda install."
-    echo "          Audio processing and CrisperWhisper transcription will not work."
-    echo ""
-    echo "          Please install FFmpeg manually using one of these methods:"
-    echo ""
-    echo "          Option 1 - apt (Ubuntu/Debian):"
-    echo "            sudo apt update && sudo apt install -y ffmpeg"
-    echo ""
-    echo "          Option 2 - conda (retry):"
-    echo "            conda install -c conda-forge ffmpeg"
-    echo ""
-    echo "          Option 3 - snap:"
-    echo "            sudo snap install ffmpeg"
-    echo ""
-    echo "          After installing FFmpeg, re-run: bash setup.sh"
-    echo ""
-fi
-
-# ============================================================
-# Install PyTorch via conda
+# Install PyTorch via pip (GPU or CPU)
 # ============================================================
 echo ""
 echo "      Detecting GPU..."
 if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
-    echo "      NVIDIA GPU detected. Installing PyTorch with CUDA via conda..."
-    if ! conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia -y; then
+    echo "      NVIDIA GPU detected. Installing PyTorch with CUDA 12.4 via pip..."
+    if ! pip install "torch>=2.0.0,<2.9.0" "torchaudio>=2.0.0,<2.9.0" --index-url https://download.pytorch.org/whl/cu124; then
         echo "      CUDA 12.4 failed, trying CUDA 12.1..."
-        conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
+        pip install "torch>=2.0.0,<2.9.0" "torchaudio>=2.0.0,<2.9.0" --index-url https://download.pytorch.org/whl/cu121
     fi
 else
-    echo "      No NVIDIA GPU detected. Installing CPU-only PyTorch via conda..."
-    conda install pytorch torchvision torchaudio cpuonly -c pytorch -y
+    echo "      No NVIDIA GPU detected. Installing CPU-only PyTorch via pip..."
+    pip install "torch>=2.0.0,<2.9.0" "torchaudio>=2.0.0,<2.9.0"
 fi
 
 # ============================================================

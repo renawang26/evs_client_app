@@ -101,13 +101,12 @@ bash setup.sh --reinstall
 Both `setup.bat` (Windows) and `setup.sh` (WSL) perform the same steps:
 
 1. **Check Conda** — exits with install instructions if not found
-2. **Check FFmpeg** — reports status; installs via conda in the next step
-3. **Create conda environment** `cw_evs_app` with Python 3.11
-4. **Install FFmpeg** via `conda install -c conda-forge ffmpeg`; if verification fails, shows platform-specific manual install instructions
-5. **Install PyTorch** — detects NVIDIA GPU and installs CUDA or CPU-only build accordingly
-6. **Install pip dependencies** from `requirements.txt`
-7. **Verify** key packages (torch, streamlit, transformers, funasr, plotly)
-8. **Initialize the database** at `data/evs_repository.db`
+2. **Check/install FFmpeg** — installs as a system binary via winget (Windows) or apt (Linux); shows manual instructions if auto-install fails
+3. **Create conda environment** `cw_evs_app` with Python 3.11 (conda is used ONLY for the env — no conda packages)
+4. **Install PyTorch via pip** — detects NVIDIA GPU and installs CUDA or CPU-only build with `--index-url`
+5. **Install pip dependencies** from `requirements.txt` (all packages, including torch)
+6. **Verify** key packages (torch, streamlit, transformers, funasr, plotly)
+7. **Initialize the database** at `data/evs_repository.db`
 
 ---
 
@@ -133,20 +132,22 @@ Both `setup.bat` (Windows) and `setup.sh` (WSL) perform the same steps:
 If you prefer to set up manually:
 
 ```bash
-# Create environment
-conda create -n cw_evs_app python=3.11
+# Create environment (conda is used ONLY for the Python env)
+conda create -n cw_evs_app python=3.11 -y
 conda activate cw_evs_app
 
-# Install FFmpeg
-conda install -c conda-forge ffmpeg
+# Install FFmpeg as a system binary (NOT via conda)
+# Windows: winget install --id=Gyan.FFmpeg -e
+# Ubuntu:  sudo apt install ffmpeg
+# macOS:   brew install ffmpeg
 
-# Install PyTorch (CUDA — adjust cuda version as needed)
-conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia
+# Install PyTorch via pip (CUDA — adjust version as needed)
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# Install PyTorch (CPU only)
-conda install pytorch torchvision torchaudio cpuonly -c pytorch
+# Install PyTorch via pip (CPU only — use this instead if no NVIDIA GPU)
+# pip install torch torchaudio
 
-# Install pip dependencies
+# Install all other pip dependencies
 pip install -r requirements.txt
 
 # Initialize database

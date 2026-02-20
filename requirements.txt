@@ -13,6 +13,14 @@ plotly>=6.0.0
 matplotlib>=3.7.0
 openpyxl>=3.1.0
 
+# PyTorch (installed via pip; GPU users should pre-install with --index-url for CUDA)
+# CPU-only:  pip install torch torchaudio
+# CUDA 12.4: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+# Pin torchaudio<2.9 — v2.9+ removed ffmpeg/soundfile backends and requires
+# torchcodec, which needs FFmpeg "full-shared" DLLs (broken on most Windows setups)
+torch>=2.0.0,<2.9.0
+torchaudio>=2.0.0,<2.9.0
+
 # Audio processing
 pydub>=0.25.1
 ffmpeg-python>=0.2.0

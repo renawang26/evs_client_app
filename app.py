@@ -2327,9 +2327,6 @@ def render_file_list_tab():
     col1, col2 = st.columns([6, 1])
     with col2:
         if st.button("🔄 Refresh", key="refresh_file_list", help="Refresh file list from database"):
-            # Clear cached data
-            if 'evs_files_df' in st.session_state:
-                del st.session_state.evs_files_df
             # Clear model pairs cache
             keys_to_delete = [k for k in st.session_state.keys() if k.startswith('evs_model_pairs_')]
             for k in keys_to_delete:
@@ -3567,10 +3564,8 @@ def render_annotate_evs_tab():
         """, unsafe_allow_html=True)
         st.session_state.evs_processing = False
 
-    # Get all files with their transcription info (cached)
-    if 'evs_files_df' not in st.session_state:
-        st.session_state.evs_files_df = EVSDataUtils.get_all_files_with_transcriptions()
-    files_df = st.session_state.evs_files_df
+    # Get all files with their transcription info (refresh each render)
+    files_df = EVSDataUtils.get_all_files_with_transcriptions()
 
     if files_df.empty:
         st.warning("No transcription files found. Please upload and transcribe audio files first.")
@@ -3644,9 +3639,6 @@ def render_annotate_evs_tab():
 
     with col5:
         if st.button('🔄', key="refresh_evs_files", help="Refresh file list and model pairs"):
-            # Clear all cached data
-            if 'evs_files_df' in st.session_state:
-                del st.session_state.evs_files_df
             # Clear model pairs cache for all files
             keys_to_delete = [k for k in st.session_state.keys() if k.startswith('evs_model_pairs_')]
             for k in keys_to_delete:

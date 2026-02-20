@@ -21,10 +21,16 @@ setup.bat                # First-time setup (skip if env exists)
 setup.bat --reinstall    # Remove env and redo full setup
 
 # Manual setup:
-conda create -n cw_evs_app python=3.11
+conda create -n cw_evs_app python=3.11 -y
 conda activate cw_evs_app
-conda install -c conda-forge ffmpeg
-conda install pytorch torchvision torchaudio pytorch-cuda=12.4 -c pytorch -c nvidia
+# Install FFmpeg as a system binary (NOT via conda):
+#   Windows: winget install --id=Gyan.FFmpeg -e
+#   Ubuntu:  sudo apt install ffmpeg
+#   macOS:   brew install ffmpeg
+# Install PyTorch (GPU):
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+# Install PyTorch (CPU only):
+#   pip install torch torchaudio
 pip install -r requirements.txt
 # Optional: for advanced interpretation analysis (semantic similarity, spaCy NLP)
 pip install -r requirements_advanced.txt
@@ -213,7 +219,7 @@ GitHub Actions workflow (`.github/workflows/python-app.yml`) runs on push/PR to 
 - **numpy**: Must be `<2.0`
 - **CUDA GPU**: Optional, needed for local CrisperWhisper (~4GB VRAM) and FunASR (~2GB VRAM)
 - **Key packages**: streamlit, pandas, plotly, matplotlib, transformers, funasr, jieba, hanlp, openpyxl, reportlab, yt-dlp, tenacity
-- **Optional (advanced analysis)**: sentence-transformers, spacy, torch, scikit-learn (see `requirements_advanced.txt`)
+- **Optional (advanced analysis)**: sentence-transformers, spacy, scikit-learn (see `requirements_advanced.txt`)
 
 ## Environment Setup
 
