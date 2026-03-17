@@ -58,7 +58,6 @@ def create_deployment_package(target_dir: Path, include_data: bool = False):
         "edit_tracker.py",
         "email_queue.py",
         "email_metrics.py",
-        "results_view.py",
         "privacy_settings.py",
         "file_display_utils.py",
 

@@ -12,12 +12,9 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series, merge
-import matplotlib.pyplot as plt
-
 import nltk
 from nltk import word_tokenize
 from nltk.tokenize import SyllableTokenizer
-from nltk.tokenize.api import TokenizerI
 from nltk.util import ngrams
 
 from IPython.core.display import HTML, display
