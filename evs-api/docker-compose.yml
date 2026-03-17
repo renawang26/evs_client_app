@@ -29,7 +29,6 @@ services:
 
   api:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ..:/repo
       - audio_files:/tmp/evs_audio
@@ -37,7 +36,7 @@ services:
       - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_UPLOAD_DIR=/tmp/evs_audio
-      - SECRET_KEY=${SECRET_KEY:-change-me-for-local-dev-only}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set — copy .env.example to .env and fill in a secure value}
     ports:
       - "8000:8000"
     depends_on:
@@ -56,7 +55,7 @@ services:
       - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_UPLOAD_DIR=/tmp/evs_audio
-      - SECRET_KEY=${SECRET_KEY:-change-me-for-local-dev-only}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
     depends_on:
       - redis
       - postgres
@@ -75,6 +74,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
       - REDIS_URL=redis://redis:6379/0
+      - AUDIO_UPLOAD_DIR=/tmp/evs_audio
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
     depends_on:
       - redis
       - postgres
@@ -87,6 +88,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
       - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
     depends_on:
       - redis
       - postgres
