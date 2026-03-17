@@ -163,6 +163,7 @@ cython_debug/
 .vscode/
 backup/
 models/
+!evs-api/app/models/
 keys/
 evs_resources/
 logs/
