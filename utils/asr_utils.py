@@ -7,7 +7,6 @@ import pandas as pd
 import time
 import logging
 import warnings
-import torch
 import streamlit as st
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +46,7 @@ def get_gpu_info():
             'memory_free': float (GB, None for CPU)
         }
     """
+    import torch
     info = {
         'available': False,
         'device': 'cpu',
@@ -75,6 +75,7 @@ def get_gpu_info():
 
 def clear_model_cache():
     """Clear the model cache to free memory."""
+    import torch
     global _MODEL_CACHE
     with _MODEL_CACHE_LOCK:
         _MODEL_CACHE.clear()
@@ -95,6 +96,7 @@ def get_cache_status():
             'gpu_memory_used': GPU memory in GB (if available)
         }
     """
+    import torch
     with _MODEL_CACHE_LOCK:
         cached = list(_MODEL_CACHE.keys())
 
@@ -194,6 +196,7 @@ def get_cached_crisperwhisper_model():
 
     with _MODEL_CACHE_LOCK:
         if cache_key not in _MODEL_CACHE:
+            import torch
             from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
             from huggingface_hub import snapshot_download, HfApi
             import os

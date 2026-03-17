@@ -3,69 +3,31 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
 from db_utils import EVSDataUtils
-from user_utils import UserUtils
 import base64
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 import logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(name)s - %(message)s')
-import torch
-import warnings
-import ffmpeg
-from pydub import AudioSegment
-import io
 import tempfile
-import subprocess
 import os
 from datetime import datetime
 import time
-import streamlit.components.v1 as components
 from evs_annotator import evs_annotator
 import json
 import sqlite3
-import plotly.graph_objects as go
-from st_aggrid import AgGrid
-from concordance_utils import ConcordanceUtils
-from utils.asr_utils import ASRUtils  # import ASRUtils class
-from results_view import render_whisper_results_tab  # Import results view functions
 from pages.download_audio import render_download_audio_tab
-from save_asr_results import save_asr_result_to_database
 import shutil
 import re
 import uuid
-# try to import librosa, if not exists, ignore
-try:
-    import librosa
-except ImportError:
-    pass
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    pass
-from dataclasses import dataclass, field
-from copy import deepcopy
-import socket
-
-# Import email queue
-from email_queue import get_email_queue, initialize_email_queue
 
 # Import file alias manager for privacy protection
-from file_alias_manager import FileAliasManager, apply_alias_to_dataframe
+from file_alias_manager import FileAliasManager
 from file_display_utils import (
     create_file_selectbox,
     create_file_selectbox_with_all,
-    show_file_alias_info,
     get_file_display_name,
-    get_original_filename_from_display,
-    prepare_files_for_display,
-    get_file_options_for_selectbox
 )
 from config.display_config import get_file_aliasing_enabled
-
-# Import Chinese NLP processor
-from chinese_nlp_unified import ChineseNLPUnified, NLPEngine, create_nlp_processor
-
 
 from logger_config import setup_logger
 
@@ -89,7 +51,7 @@ EVS_RESOURCES_PATH = r"./evs_resources"
 SLICE_AUDIO_PATH = os.path.join(EVS_RESOURCES_PATH, "slice_audio_files")
 
 # Import CSS from styles.py
-from styles import COLOR_LEGEND, EVS_LEGEND, GREEN, YELLOW, PINK
+from styles import GREEN, YELLOW, PINK
 
  # language selection
 LANGUAGES = {
@@ -106,7 +68,7 @@ ASR_PROVIDERS = {
 }
 
 # 添加配置文件导入
-from config import AUTH_CONFIG, GOOGLE_CLOUD_CONFIG
+from config import AUTH_CONFIG
 from config.asr_language_config import (
     check_funasr_available,
     check_crisperwhisper_available,
@@ -142,6 +104,9 @@ def render_login_page():
         st.session_state.is_admin = AUTH_CONFIG['DEFAULT_USER'].get('is_admin', False)  # 使用get方法安全获取is_admin值
         st.rerun()
         return
+
+    from user_utils import UserUtils
+    import socket
 
     st.title("Welcome to EVS Navigation")
 
@@ -244,23 +209,6 @@ def render_login_page():
                     st.success(message)
                 else:
                     st.error(message)
-
-# 添加注销功能
-def render_user_menu():
-    """Render user menu"""
-    if check_authentication():
-        # Display user information
-        st.sidebar.write(f"Current User: {st.session_state.user_email}")
-        if st.session_state.get('is_admin', False):
-            st.sidebar.write("Role: Administrator")
-        else:
-            st.sidebar.write("Role: Regular User")
-
-        if st.sidebar.button("Logout"):
-            # Clear all session states
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
 
 def render_admin_panel():
     """Render admin panel"""
@@ -1072,7 +1020,7 @@ def render_admin_panel():
             get_original_filename,
             render_privacy_settings_admin_panel
         )
-        from file_display_utils import get_file_display_name, display_privacy_status
+        from file_display_utils import get_file_display_name
 
         # Create sub-tabs for different privacy management areas
         privacy_sub_tabs = st.tabs([
@@ -2143,6 +2091,7 @@ def process_chinese_nlp_unified(file_name: str, asr_provider: str, engine: str =
         True if processing successful, False otherwise
     """
     try:
+        from chinese_nlp_unified import create_nlp_processor
         # Initialize unified NLP processor
         nlp_processor = create_nlp_processor(engine)
 
@@ -3321,76 +3270,6 @@ def _llm_pairs_to_selections(llm_pairs: list, en_data, zh_data) -> tuple:
     return en_selections, zh_selections
 
 
-def process_selected_word(word, ts, selected_list, progress_placeholder, lang_name):
-    # Helper function to process a selected word and add it to the appropriate list
-    if pd.notna(word) and str(word).strip():
-        # Convert timestamp to seconds if it's in MM:SS.ms format
-        if ':' in ts:
-            try:
-                minutes, seconds = ts.split(':')
-                seconds_value = float(minutes) * 60 + float(seconds)
-                ts_seconds = f"{seconds_value:.3f}"
-            except ValueError:
-                # If conversion fails, use the original timestamp
-                ts_seconds = ts
-        else:
-            # Already in seconds format
-            ts_seconds = ts
-
-        selected_list.append({
-            'time': ts_seconds,
-            'word': str(word).strip()
-        })
-        progress_placeholder.success(f"✓ {lang_name} selected: {ts} ({ts_seconds}s) - {word}")
-
-
-def create_word_pairs(selected_en, selected_zh, progress_placeholder):
-    # Helper function to create pairs from selected English and Chinese words
-    selected_pairs = {}
-    pair_seq = 1
-
-    if not selected_en or not selected_zh:
-        progress_placeholder.warning("Cannot create pairs: Missing either English or Chinese selections")
-        return {}
-
-    # Sort selections by time
-    sorted_en = sorted(selected_en, key=lambda x: float(x['time']))
-    sorted_zh = sorted(selected_zh, key=lambda x: float(x['time']))
-
-    progress_placeholder.write(f"Sorting: {len(sorted_en)} English words, {len(sorted_zh)} Chinese words")
-
-    # Create pairs - use the minimum number from either list
-    min_len = min(len(sorted_en), len(sorted_zh))
-
-    for i in range(min_len):
-        en = sorted_en[i]
-        zh = sorted_zh[i]
-
-        try:
-            # Calculate EVS (ear-voice span)
-            en_time = float(en['time'])
-            zh_time = float(zh['time'])
-            evs = zh_time - en_time  # Calculate EVS
-
-            # Create the pair
-            selected_pairs[pair_seq] = {
-                'en_time': en['time'],
-                'en': en['word'],
-                'zh_time': zh['time'],
-                'zh': zh['word'],
-                'evs': evs
-            }
-
-            progress_placeholder.write(f"Created pair #{pair_seq}: EN={en['time']}s '{en['word']}', ZH={zh['time']}s '{zh['word']}', EVS={evs:.3f}s")
-            pair_seq += 1
-
-        except Exception as e:
-            progress_placeholder.error(f"Error creating pair: {str(e)}, en={en}, zh={zh}")
-
-    progress_placeholder.success(f"Created {len(selected_pairs)} pairs")
-    return selected_pairs
-
-
 def get_evs_data(interpret_file: str, slice_duration: int, en_provider: str, zh_provider: str, model: str = None):
     """Get EVS data from database with per-language provider support.
 
@@ -4068,89 +3947,6 @@ def display_evs_annotate_table(interpret_file: str, slice_duration: int, en_prov
     # Mark table as rendered to skip progress bar on subsequent reruns
     st.session_state[table_render_key] = True
 
-def update_pairs_from_selections():
-    # Update pairs based on current selections
-    selected_en = []
-    selected_zh = []
-
-    # Collect selections from all tables
-    for key in st.session_state:
-        if key.startswith('editor_table_'):
-            # check if it is a dataframe
-            if not isinstance(st.session_state.get(key), pd.DataFrame):
-                logging.warning(f"session {st.session_state.get('session_id', 'unknown')}: table {key} is not a dataframe")
-                continue
-
-            df = st.session_state[key]
-            for col in df.columns:
-                if col.endswith('_select'):
-                    ts = col[:-7]  # Get timestamp from column name
-                    if df.iloc[0][col]:  # English selection
-                        selected_en.append({
-                            'time': ts,
-                            'word': df.iloc[0][f"{ts}_word"]
-                        })
-                    if df.iloc[1][col]:  # Chinese selection
-                        selected_zh.append({
-                            'time': ts,
-                            'word': df.iloc[1][f"{ts}_word"]
-                        })
-
-    # Create pairs based on selected words
-    selected_pairs = {}
-    pair_seq = 1
-
-    # Create pairs matching the pattern in the existing pairs table
-    if len(selected_en) == len(selected_zh):
-        # Sort selections by time
-        sorted_en = sorted(selected_en, key=lambda x: x['time'])
-        sorted_zh = sorted(selected_zh, key=lambda x: x['time'])
-
-        # Create pairs in order
-        for en, zh in zip(sorted_en, sorted_zh):
-            evs = calculate_evs(en['time'], zh['time'])
-            selected_pairs[pair_seq] = {
-                'en_time': en['time'],
-                'en': en['word'],
-                'zh_time': zh['time'],
-                'zh': zh['word'],
-                'evs': evs
-            }
-            pair_seq += 1
-
-    # Update session state
-    st.session_state.selected_pairs = selected_pairs
-
-    """Load pairs from current selections in the table and refresh EVS pairs display"""
-    # Display pairs using existing pairs from session state
-    if st.session_state.selected_pairs:
-        pairs_df = pd.DataFrame([
-            {
-                'Pair': pair_seq,
-                'en_time': pair_data['en_time'],
-                'en': pair_data['en'],
-                'zh_time': pair_data['zh_time'],
-                'zh': pair_data['zh'],
-                'evs': pair_data['evs']
-            }
-            for pair_seq, pair_data in st.session_state.selected_pairs.items()
-        ]).sort_values('Pair')
-
-        # add title
-        st.subheader("Existing & New Pairs")
-        st.dataframe(
-            pairs_df,
-            hide_index=True,
-            column_config={
-                'Pair': st.column_config.NumberColumn('Pair'),
-                'en_time': st.column_config.TextColumn('en_time', width='small'),
-                'en': st.column_config.TextColumn('en', width='small'),
-                'zh_time': st.column_config.TextColumn('zh_time', width='small'),
-                'zh': st.column_config.TextColumn('zh', width='small'),
-                'EVS': st.column_config.NumberColumn('evs', width='small', format="%.3f")
-            }
-        )
-
 def time_str_to_seconds(time_str):
     """Convert time string to seconds. Handles multiple formats:
     - "MM:SS.mmm" (e.g., "5:13.200")
@@ -4178,42 +3974,9 @@ def time_str_to_seconds(time_str):
         logger.debug(f"Time string parsing failed for '{time_str}': {e}")
         return 0
 
-def calculate_evs(start_time, end_time):
-    """Calculate EVS value"""
-    try:
-        # ensure two times are floats
-        start = float(start_time)
-        end = float(end_time)
-        return end - start
-    except (ValueError, TypeError) as e:
-        logging.error(f"Calcluate EVS error: {str(e)}, start_time={start_time}, end_time={end_time}")
-        return 0.0
-
-def slice_audio(input_file, duration):
-    audio = AudioSegment.from_file(input_file)
-    slice_duation = duration * 1000  # in milliseconds
-
-    output_prefix = os.path.splitext(input_file.name)[0]
-
-    container = st.empty()
-
-    for i in range(0, len(audio), slice_duation):
-        chunk = audio[i:i + slice_duation]
-        output_path = f"{EVS_RESOURCES_PATH}/slice_audio_files/{output_prefix}"
-        if not os.path.exists(output_path):
-            container.write(f"Creating directory {output_path}")
-            os.makedirs(output_path)
-        container.empty()
-        container.write(f"Exporting chunk {i//slice_duation} to {output_path}/{i//slice_duation}.mp3")
-        chunk.export(f"{output_path}/{i//slice_duation}.mp3", format="mp3")
-
-    container.empty()
-    container.write("Audio sliced successfully")
-
-    return output_path
-
 def render_analysis_concordance_tab():
     # Render the corpus analysis tab with concordance and word list subtabs
+    from concordance_utils import ConcordanceUtils
 
     # Get all files with their transcription info (supports different ASR per language)
     concordance_files_df = EVSDataUtils.get_all_files_with_transcriptions()
@@ -4902,24 +4665,13 @@ def main():
         ])
 
     with tabs[0]:
-        # Language-specific ASR configuration imports
-        from config.asr_language_config import (
-            get_model_options_for_ui,
-            get_chinese_asr_recommendations,
-            check_funasr_available,
-            check_crisperwhisper_available,
-            get_available_providers,
-            FUNASR_MODELS,
-            CRISPERWHISPER_MODELS
-        )
-
         # Check FunASR availability
         funasr_available = check_funasr_available()
         # Check CrisperWhisper availability
         crisperwhisper_available = check_crisperwhisper_available()
 
         # Show GPU and cache status
-        from utils.asr_utils import get_gpu_info, get_cache_status
+        from utils.asr_utils import ASRUtils, get_gpu_info, get_cache_status
         gpu_info = get_gpu_info()
         cache_status = get_cache_status()
 
@@ -5151,7 +4903,6 @@ def main():
         def get_safe_filename(uploaded_file):
             """Get filename with proper UTF-8 encoding for Chinese characters"""
             import hashlib
-            from datetime import datetime
 
             try:
                 filename = uploaded_file.name
@@ -5536,6 +5287,7 @@ If the detection is incorrect, manually change the Channel Language dropdowns ab
                     st.info("Stereo audio detected, will process both channels separately")
 
                 with st.spinner("Transcribing audio..."):
+                    from save_asr_results import save_asr_result_to_database
                     # Determine language assignment and filenames based on mode
                     if is_pre_separated:
                         # Pre-separated mode: fixed assignment (EN file → English, ZH file → Chinese)
@@ -7435,21 +7187,6 @@ def save_si_analysis_results(results):
         logger.error(f"Error saving SI analysis results: {str(e)}", exc_info=True)
         return False
 
-def determine_evs_quality_level(mean_evs):
-    """Determine quality level based on mean EVS value (deprecated - for future use)"""
-    if mean_evs is None:
-        return "Unknown"
-
-    abs_evs = abs(mean_evs)
-    if abs_evs <= 2.0:
-        return "Excellent"
-    elif abs_evs <= 3.0:
-        return "Good"
-    elif abs_evs <= 5.0:
-        return "Acceptable"
-    else:
-        return "Needs Improvement"
-
 def determine_coverage_quality_level(coverage_rate):
     """Determine quality level based on segment coverage rate"""
     if coverage_rate is None:
@@ -7666,48 +7403,6 @@ Please reply in Chinese, in JSON format:
             "quality_issues": ["LLM service unavailable"],
             "filtered_pairs": []
         }
-
-def call_ollama_llm(prompt, config):
-    """Call Ollama LLM API"""
-    import requests
-
-    url = f"{config['llm_base_url']}/api/generate"
-    data = {
-        "model": config['llm_model'],
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": config['llm_temperature'],
-            "num_predict": config['llm_max_tokens']
-        }
-    }
-
-    response = requests.post(url, json=data, timeout=config['llm_request_timeout'])
-    response.raise_for_status()
-
-    result = response.json()
-    return result.get('response', '')
-
-def call_openai_llm(prompt, config):
-    """Call OpenAI API"""
-    import openai
-
-    client = openai.OpenAI(
-        api_key=config.get('llm_api_key', ''),
-        base_url=config.get('llm_base_url', 'https://api.openai.com/v1')
-    )
-
-    response = client.chat.completions.create(
-        model=config['llm_model'],
-        messages=[
-            {"role": "system", "content": "You are a professional simultaneous interpretation quality analysis expert."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=config['llm_temperature'],
-        max_tokens=config['llm_max_tokens']
-    )
-
-    return response.choices[0].message.content
 
 def create_llm_based_pairs(en_data, zh_data):
     """Create EVS pairs using LLM semantic analysis"""
@@ -8216,7 +7911,6 @@ def extract_simple_pairs(response):
 def perform_advanced_si_analysis(asr_data, file_name, asr_provider):
     """Perform advanced simultaneous interpretation analysis using LLM and sophisticated metrics"""
     try:
-        from datetime import datetime
         import re
         from collections import Counter
 
@@ -8307,28 +8001,6 @@ def analyze_translation_accuracy(en_data, zh_data, file_name=None, asr_provider=
                 asr_provider = asr_provider or 'unknown'
 
         logger.info(f"Starting time-based analysis for file: {file_name}, provider: {asr_provider}")
-
-        # DEBUG: Test if the exact parameters work
-        from save_asr_results import get_db_connection
-        import pandas as pd
-        with get_db_connection() as conn:
-            test_query = """
-            SELECT COUNT(*) as segment_count FROM asr_results_segments
-            WHERE file_name = ? AND asr_provider = ?
-            """
-            test_result = pd.read_sql_query(test_query, conn, params=[file_name, asr_provider])
-            logger.info(f"Segments found for these parameters: {test_result.iloc[0]['segment_count']}")
-            if test_result.iloc[0]['segment_count'] == 0:
-                logger.error(f"No segments found! This explains the failure.")
-
-        # Test import first
-        try:
-            logger.info("Testing import of time mapping function...")
-            test_result = analyze_translation_accuracy_with_time_mapping.__name__
-            logger.info(f"Import successful: {test_result}")
-        except Exception as import_error:
-            logger.error(f"Import test failed: {str(import_error)}")
-            raise import_error
 
         # Use the new time-based mapping analysis
         translation_df, summary_stats = analyze_translation_accuracy_with_time_mapping(file_name, asr_provider)
@@ -9208,7 +8880,6 @@ def display_advanced_analysis_results(results):
     if st.button("📊 Export Advanced Analysis Report", type="secondary"):
         try:
             import json
-            from datetime import datetime
 
             # Prepare export data
             export_data = {
@@ -9230,135 +8901,6 @@ def display_advanced_analysis_results(results):
         except Exception as e:
             st.error(f"Failed to generate report: {str(e)}")
 
-def show_nlp_results_review(file_name: str, asr_provider: str):
-    """
-    Show comprehensive NLP results review and comparison
-
-    Args:
-        file_name: File name
-        asr_provider: ASR provider
-    """
-    try:
-        st.subheader("🔍 中文NLP结果检视")
-
-        # Get NLP results from database
-        with EVSDataUtils.get_db_connection() as conn:
-            query = """
-            SELECT edit_word, nlp_word, nlp_pos, nlp_confidence, nlp_engine,
-                   nlp_engine_info, nlp_processed_at, nlp_comparison
-            FROM asr_results_words
-            WHERE file_name = ? AND asr_provider = ? AND lang = 'zh'
-                AND nlp_word IS NOT NULL
-            ORDER BY segment_id, word_seq_no
-            LIMIT 100
-            """
-
-            cursor = conn.cursor()
-            cursor.execute(query, [file_name, asr_provider])
-            results = cursor.fetchall()
-
-            if not results:
-                st.warning("未找到NLP处理结果。请先运行中文NLP分词。")
-                return
-
-            # Convert to DataFrame for easier handling
-            df = pd.DataFrame(results, columns=[
-                'original_word', 'nlp_word', 'nlp_pos', 'nlp_confidence',
-                'nlp_engine', 'nlp_engine_info', 'nlp_processed_at', 'nlp_comparison'
-            ])
-
-            # Show summary statistics
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.metric("处理词数", len(df))
-
-            with col2:
-                engine_used = df['nlp_engine'].iloc[0] if not df.empty else "未知"
-                st.metric("使用引擎", engine_used)
-
-            with col3:
-                avg_confidence = df['nlp_confidence'].mean() if not df.empty else 0
-                st.metric("平均置信度", f"{avg_confidence:.3f}")
-
-            with col4:
-                processed_time = df['nlp_processed_at'].iloc[0] if not df.empty else "未知"
-                if processed_time != "未知":
-                    processed_time = processed_time[:19]  # Remove microseconds
-                st.metric("处理时间", processed_time)
-
-            # Show detailed results table
-            st.subheader("📋 详细结果对比")
-
-            # Create comparison DataFrame
-            comparison_df = df[['original_word', 'nlp_word', 'nlp_pos', 'nlp_confidence']].copy()
-            comparison_df.columns = ['原始词', 'NLP分词', '词性', '置信度']
-
-            # Add improvement indicator
-            comparison_df['改进状态'] = comparison_df.apply(
-                lambda row: "✅ 改进" if row['原始词'] != row['NLP分词'] else "⚪ 相同", axis=1
-            )
-
-            # Show interactive table
-            st.dataframe(
-                comparison_df,
-                width='stretch',
-                height=400
-            )
-
-            # Show engine comparison option
-            st.subheader("⚖️ 引擎对比")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("🔄 对比jieba vs HanLP", key='btn_compare_engines'):
-                    st.session_state['show_nlp_comparison'] = True
-                    st.rerun()
-
-            with col2:
-                if st.button("📊 生成测试报告", key='btn_generate_report'):
-                    generate_nlp_test_report(file_name, asr_provider, df)
-
-            # Show word frequency analysis
-            st.subheader("📈 词频分析")
-
-            from collections import Counter
-
-            # Original words frequency
-            original_freq = Counter(df['original_word'].tolist())
-            nlp_freq = Counter(df['nlp_word'].tolist())
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.write("**原始词频 (前10)**")
-                original_top = pd.DataFrame(original_freq.most_common(10), columns=['词汇', '频次'])
-                st.dataframe(original_top, width='stretch')
-
-            with col2:
-                st.write("**NLP词频 (前10)**")
-                nlp_top = pd.DataFrame(nlp_freq.most_common(10), columns=['词汇', '频次'])
-                st.dataframe(nlp_top, width='stretch')
-
-            # Show POS distribution
-            st.subheader("🏷️ 词性分布")
-
-            pos_freq = Counter(df['nlp_pos'].tolist())
-            pos_df = pd.DataFrame(list(pos_freq.items()), columns=['词性', '数量'])
-            pos_df = pos_df.sort_values('数量', ascending=False)
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.dataframe(pos_df, width='stretch')
-
-            with col2:
-                st.bar_chart(pos_df.set_index('词性'))
-
-    except Exception as e:
-        logger.error(f"Error showing NLP results review: {str(e)}")
-        st.error(f"显示NLP结果时出错: {str(e)}")
 
 def show_nlp_engine_comparison(file_name: str, asr_provider: str):
     """
@@ -9492,81 +9034,6 @@ def show_nlp_engine_comparison(file_name: str, asr_provider: str):
         logger.error(f"Error in NLP engine comparison: {str(e)}")
         st.error(f"引擎对比时出错: {str(e)}")
         st.session_state['show_nlp_comparison'] = False
-
-def generate_nlp_test_report(file_name: str, asr_provider: str, results_df: pd.DataFrame):
-    """
-    Generate a comprehensive NLP test report
-
-    Args:
-        file_name: File name
-        asr_provider: ASR provider
-        results_df: Results DataFrame
-    """
-    try:
-        st.subheader("📋 NLP测试报告")
-
-        # Generate report content
-        report_content = f"""
-# 中文NLP处理测试报告
-
-## 基本信息
-- **文件名**: {file_name}
-- **ASR提供商**: {asr_provider}
-- **处理时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-- **处理词数**: {len(results_df)}
-
-## 引擎信息
-- **使用引擎**: {results_df['nlp_engine'].iloc[0] if not results_df.empty else '未知'}
-- **平均置信度**: {results_df['nlp_confidence'].mean():.3f}
-
-## 处理统计
-- **改进词数**: {len(results_df[results_df['original_word'] != results_df['nlp_word']])}
-- **改进比例**: {len(results_df[results_df['original_word'] != results_df['nlp_word']]) / len(results_df) * 100:.1f}%
-
-## 词性分布
-"""
-
-        # Add POS distribution
-        from collections import Counter
-        pos_freq = Counter(results_df['nlp_pos'].tolist())
-        for pos, count in pos_freq.most_common(10):
-            report_content += f"- **{pos}**: {count}个\n"
-
-        report_content += f"""
-
-## 高频词汇 (前10)
-"""
-
-        # Add word frequency
-        word_freq = Counter(results_df['nlp_word'].tolist())
-        for word, count in word_freq.most_common(10):
-            report_content += f"- **{word}**: {count}次\n"
-
-        report_content += f"""
-
-## 改进示例
-"""
-
-        # Add improvement examples
-        improved = results_df[results_df['original_word'] != results_df['nlp_word']].head(5)
-        for _, row in improved.iterrows():
-            report_content += f"- {row['original_word']} → {row['nlp_word']} ({row['nlp_pos']})\n"
-
-        # Show report
-        st.markdown(report_content)
-
-        # Download button
-        st.download_button(
-            label="📥 下载报告",
-            data=report_content,
-            file_name=f"nlp_report_{file_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-            mime="text/markdown",
-            key='btn_download_report'
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating NLP test report: {str(e)}")
-        st.error(f"生成报告时出错: {str(e)}")
 
 if __name__ == "__main__":
     main()

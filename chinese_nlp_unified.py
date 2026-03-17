@@ -13,7 +13,6 @@ import logging
 import re
 from typing import List, Dict, Tuple, Optional, Union
 from datetime import datetime
-import sqlite3
 from pathlib import Path
 from enum import Enum
 
