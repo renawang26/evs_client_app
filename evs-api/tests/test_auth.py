@@ -51,3 +51,15 @@ def test_login_wrong_password():
 def test_login_unknown_user():
     r = client.post("/auth/login", json={"email": "nobody@evs.com", "password": "pass"})
     assert r.status_code == 401
+
+
+def test_protected_route_without_token():
+    r = client.get("/files")
+    assert r.status_code == 403  # HTTPBearer returns 403 when no Authorization header
+
+
+def test_protected_route_with_valid_token():
+    login_r = client.post("/auth/login", json={"email": "test@evs.com", "password": "pass123"})
+    token = login_r.json()["access_token"]
+    r = client.get("/files", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
