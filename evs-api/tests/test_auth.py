@@ -22,6 +22,7 @@ def override_get_db():
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestSession()
     db.add(User(email="test@evs.com", password=hash_password("pass123")))
