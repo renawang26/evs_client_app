@@ -8,11 +8,13 @@ from app.core.config import settings
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# Module-level engine (shared pool across all tasks — avoids per-task pool exhaustion)
+_engine = create_engine(settings.DATABASE_URL)
+_SessionFactory = sessionmaker(bind=_engine)
+
 
 def _get_db_session():
-    engine = create_engine(settings.DATABASE_URL)
-    Session = sessionmaker(bind=engine)
-    return Session()
+    return _SessionFactory()
 
 
 @celery.task(bind=True)
@@ -49,8 +51,15 @@ def run_asr(self, task_id: str, audio_path: str, lang: str,
             task.status = "failed"
             task.error = "No transcription results"
         else:
-            from save_asr_results import save_asr_result_to_database
-            save_asr_result_to_database(words_df, segments_df)
+            # save_asr_results.py calls st.error() in error paths (Streamlit-dependent).
+            # Wrap in try/except so a save failure does not discard the completed transcription.
+            # TODO Phase 2: replace with worker-safe persistence via EVSDataUtils directly.
+            try:
+                from save_asr_results import save_asr_result_to_database
+                save_asr_result_to_database(words_df, segments_df)
+            except Exception as save_err:
+                # Log but do not fail the task — transcription succeeded even if save failed
+                task.error = f"Save warning: {str(save_err)[:200]}"
             task.status = "done"
             task.progress = 100
 

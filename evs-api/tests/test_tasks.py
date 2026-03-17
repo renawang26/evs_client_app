@@ -49,7 +49,7 @@ def test_submit_asr_returns_task_id(tmp_path):
     audio.write_bytes(b"fake")
 
     with patch("app.core.config.settings.AUDIO_UPLOAD_DIR", str(tmp_path)), \
-         patch("app.workers.asr_tasks.run_asr.delay") as mock_delay:
+         patch("app.routers.tasks.run_asr.delay") as mock_delay:
         r = client.post("/tasks/asr", json={
             "file_name": "test.wav", "lang": "en",
             "provider": "crisperwhisper", "model": "default"
