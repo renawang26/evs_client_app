@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: evs
+      POSTGRES_PASSWORD: evs
+      POSTGRES_DB: evs
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ..:/repo
+      - audio_files:/tmp/evs_audio
+    environment:
+      - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
+      - REDIS_URL=redis://redis:6379/0
+      - AUDIO_UPLOAD_DIR=/tmp/evs_audio
+      - SECRET_KEY=${SECRET_KEY:-change-me-for-local-dev-only}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-en:
+    build: .
+    command: celery -A app.workers.celery_app.celery worker -Q asr_en -c 1 --loglevel=info
+    volumes:
+      - ..:/repo
+      - audio_files:/tmp/evs_audio
+    environment:
+      - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
+      - REDIS_URL=redis://redis:6379/0
+      - AUDIO_UPLOAD_DIR=/tmp/evs_audio
+      - SECRET_KEY=${SECRET_KEY:-change-me-for-local-dev-only}
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  worker-zh:
+    build: .
+    command: celery -A app.workers.celery_app.celery worker -Q asr_zh -c 2 --loglevel=info
+    volumes:
+      - ..:/repo
+      - audio_files:/tmp/evs_audio
+    environment:
+      - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - postgres
+
+  worker-cpu:
+    build: .
+    command: celery -A app.workers.celery_app.celery worker -Q nlp,default -c 4 --loglevel=info
+    volumes:
+      - ..:/repo
+    environment:
+      - DATABASE_URL=postgresql://evs:evs@postgres:5432/evs
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - postgres
+
+volumes:
+  pg_data:
+  audio_files:
