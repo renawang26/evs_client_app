@@ -1,7 +1,7 @@
 import os
 import shutil
 from typing import List
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -28,13 +28,16 @@ def upload_file(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
+    safe_name = os.path.basename(file.filename or "")
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     os.makedirs(settings.AUDIO_UPLOAD_DIR, exist_ok=True)
-    dest = os.path.join(settings.AUDIO_UPLOAD_DIR, file.filename)
+    dest = os.path.join(settings.AUDIO_UPLOAD_DIR, safe_name)
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
     asr_file = AsrFile(
-        file_name=file.filename,
+        file_name=safe_name,
         lang=lang,
         asr_provider="pending",
         model="pending",
