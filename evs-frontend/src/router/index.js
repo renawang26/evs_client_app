@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import FilesView from '../views/FilesView.vue'
+import TranscribeView from '../views/TranscribeView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -8,6 +9,7 @@ const router = createRouter({
     { path: '/', redirect: '/login' },
     { path: '/login', component: LoginView, meta: { public: true } },
     { path: '/files', component: FilesView },
+    { path: '/transcribe', component: TranscribeView },
   ],
 })
 
