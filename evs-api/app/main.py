@@ -14,6 +14,11 @@ _annotator_path = Path(__file__).parent.parent.parent / "evs_annotator"
 if _annotator_path.exists():
     app.mount("/static/annotator", StaticFiles(directory=str(_annotator_path)), name="annotator")
 
+# Serve built Vue SPA — must come AFTER API routes
+_frontend_path = Path(__file__).parent.parent / "static" / "frontend"
+if _frontend_path.exists():
+    app.mount("/app", StaticFiles(directory=str(_frontend_path), html=True), name="frontend")
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
